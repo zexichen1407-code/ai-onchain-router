@@ -17,4 +17,26 @@ describe("smart route optimizer", () => {
     expect(quote.allocations.length).toBeGreaterThanOrEqual(1);
     expect(quote.alternatives.length).toBeGreaterThanOrEqual(1);
   });
+
+  it("can restrict quotes to routes executable by one router", () => {
+    const quote = buildSmartRouteQuote(DEMO_TOKENS, buildDemoPools(), {
+      fromSymbol: "USDC",
+      toSymbol: "WETH",
+      amount: "25000",
+      slippageBps: 50,
+      maxHops: 2,
+      maxSplits: 8,
+      singleRouterOnly: true,
+    });
+
+    for (const allocation of quote.allocations) {
+      const firstRouter = allocation.route.hops[0]?.pool.dex.router.toLowerCase();
+      expect(firstRouter).toBeDefined();
+      expect(
+        allocation.route.hops.every(
+          (hop) => hop.pool.dex.router.toLowerCase() === firstRouter,
+        ),
+      ).toBe(true);
+    }
+  });
 });

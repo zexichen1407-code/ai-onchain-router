@@ -5,6 +5,9 @@
   "type": "module",
   "description": "Explainable AI-style smart order router for EVM DEX liquidity.",
   "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1",
     "demo": "tsx src/cli.ts --demo --from USDC --to WETH --amount 25000 --max-hops 2 --splits 8",
     "quote": "tsx src/cli.ts",
     "live": "tsx src/cli.ts --live",
@@ -13,12 +16,19 @@
   },
   "dependencies": {
     "dotenv": "^16.4.7",
+    "lucide-react": "^1.23.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "viem": "^2.23.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
+    "vite": "^8.1.3",
     "vitest": "^4.1.9"
   },
   "overrides": {

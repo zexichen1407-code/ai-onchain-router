@@ -27,6 +27,14 @@ export function buildSwapCalls(
     if (!router) {
       throw new Error(`Cannot build calldata for empty route ${allocation.route.id}`);
     }
+    const mixedRouter = allocation.route.hops.some(
+      (hop) => hop.pool.dex.router.toLowerCase() !== router.toLowerCase(),
+    );
+    if (mixedRouter) {
+      throw new Error(
+        `Route ${allocation.route.id} crosses multiple routers and needs an aggregator contract`,
+      );
+    }
     const path = routePath(allocation);
     const data = encodeFunctionData({
       abi: UNISWAP_V2_ROUTER_ABI,

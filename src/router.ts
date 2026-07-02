@@ -27,7 +27,9 @@ export function buildSmartRouteQuote(
   const tokenOut = findToken(tokens, request.toSymbol);
   const amountIn = parseTokenAmount(tokenIn, request.amount);
 
-  const routes = findCandidateRoutes(pools, tokenIn, tokenOut, request.maxHops);
+  const routes = findCandidateRoutes(pools, tokenIn, tokenOut, request.maxHops, {
+    singleRouterOnly: Boolean(request.singleRouterOnly),
+  });
   if (routes.length === 0) {
     throw new Error(`No route found from ${tokenIn.symbol} to ${tokenOut.symbol}`);
   }
@@ -87,6 +89,7 @@ export function findCandidateRoutes(
   tokenIn: Token,
   tokenOut: Token,
   maxHops: number,
+  options: { singleRouterOnly?: boolean } = {},
 ): CandidateRoute[] {
   const routes: CandidateRoute[] = [];
   const target = tokenKey(tokenOut);
@@ -111,10 +114,13 @@ export function findCandidateRoutes(
       const nextHops = [...hops, hop];
 
       if (nextKey === target) {
-        routes.push({
+        const route = {
           id: routeId(nextHops),
           hops: nextHops,
-        });
+        };
+        if (!options.singleRouterOnly || isSingleRouterRoute(route)) {
+          routes.push(route);
+        }
       } else {
         dfs(next, nextHops, new Set([...visitedTokens, nextKey]));
       }
@@ -123,6 +129,14 @@ export function findCandidateRoutes(
 
   dfs(tokenIn, [], new Set([tokenKey(tokenIn)]));
   return dedupeRoutes(routes);
+}
+
+export function isSingleRouterRoute(route: CandidateRoute): boolean {
+  const firstRouter = route.hops[0]?.pool.dex.router.toLowerCase();
+  if (!firstRouter) {
+    return false;
+  }
+  return route.hops.every((hop) => hop.pool.dex.router.toLowerCase() === firstRouter);
 }
 
 function allocateGreedy(

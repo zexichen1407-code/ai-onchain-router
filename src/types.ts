@@ -81,6 +81,7 @@ export interface QuoteRequest {
   slippageBps: number;
   maxHops: number;
   maxSplits: number;
+  singleRouterOnly?: boolean;
 }
 
 export interface SwapCall {

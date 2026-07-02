@@ -17,6 +17,7 @@ async function main(): Promise<void> {
   const tokens = useLive ? MAINNET_TOKENS : DEMO_TOKENS;
   const pools = await loadPools(args, useLive, tokens);
 
+  const toAddress = stringArg(args, "to-address", "");
   const request: QuoteRequest = {
     fromSymbol: stringArg(args, "from", "USDC"),
     toSymbol: stringArg(args, "to", "WETH"),
@@ -24,6 +25,7 @@ async function main(): Promise<void> {
     slippageBps: numberArg(args, "slippage-bps", 50),
     maxHops: numberArg(args, "max-hops", 2),
     maxSplits: numberArg(args, "splits", 8),
+    singleRouterOnly: toAddress.length > 0,
   };
 
   const quote = buildSmartRouteQuote(tokens, pools, request);
@@ -35,7 +37,6 @@ async function main(): Promise<void> {
 
   printHuman(quote, useLive ? "live mainnet" : "demo");
 
-  const toAddress = stringArg(args, "to-address", "");
   if (toAddress.length > 0) {
     if (!isAddress(toAddress)) {
       throw new Error(`Invalid --to-address: ${toAddress}`);

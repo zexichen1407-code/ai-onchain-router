@@ -14,6 +14,21 @@ npm install
 npm run demo
 ```
 
+## 本地 UI
+
+```powershell
+cd C:\Users\zexi\ai-onchain-router
+npm run dev
+```
+
+打开 Vite 给出的本地地址。页面支持：
+
+- 连接浏览器注入钱包，例如 MetaMask 或 Rabby。
+- 读取 Ethereum mainnet 上 Uniswap V2 / SushiSwap V2 类池子的 reserves。
+- 生成只包含单一 router 可执行路径的智能路由。
+- 签名当前 quote。
+- 依次发起 ERC20 approval 和 swap 交易，由钱包逐笔确认。
+
 ## 链上报价
 
 先复制 `.env.example` 为 `.env`，填入主网 RPC：
@@ -36,4 +51,5 @@ npm run live -- --from USDC --to WETH --amount 1000 --to-address 0xYourWallet --
 
 - 当前支持 EVM 链和 Uniswap V2/QuickSwap/SushiSwap 这类 constant-product 池。
 - AI 部分是可解释评分器，不是黑盒模型：输出量、滑点、池子冲击、hop 数、DEX 风险共同决定最终排序。
+- UI 的真实 swap 模式只选择同一个 router 内可执行的路径。跨 DEX 混合多跳需要聚合器执行合约，当前不会伪装成可交易路径。
 - 生产使用前还需要加：MEV 保护、permit/approval 管理、私有交易通道、价格预言机、失败回滚策略、合约级审计和链上模拟。
