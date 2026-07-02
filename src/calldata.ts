@@ -1,4 +1,4 @@
-import { encodeFunctionData, getAddress, type Address } from "viem";
+import { encodeFunctionData, getAddress, type Address, type Hex } from "viem";
 import type { RouteAllocation, SwapCall, Token } from "./types.js";
 
 const UNISWAP_V2_ROUTER_ABI = [
@@ -15,13 +15,43 @@ const UNISWAP_V2_ROUTER_ABI = [
     ],
     outputs: [{ name: "amounts", type: "uint256[]" }],
   },
+  {
+    type: "function",
+    name: "swapExactETHForTokens",
+    stateMutability: "payable",
+    inputs: [
+      { name: "amountOutMin", type: "uint256" },
+      { name: "path", type: "address[]" },
+      { name: "to", type: "address" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amounts", type: "uint256[]" }],
+  },
+  {
+    type: "function",
+    name: "swapExactTokensForETH",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "amountIn", type: "uint256" },
+      { name: "amountOutMin", type: "uint256" },
+      { name: "path", type: "address[]" },
+      { name: "to", type: "address" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amounts", type: "uint256[]" }],
+  },
 ] as const;
 
 export function buildSwapCalls(
   allocations: RouteAllocation[],
   recipient: Address,
   deadlineSeconds: bigint,
+  options: { nativeInput?: boolean; nativeOutput?: boolean } = {},
 ): SwapCall[] {
+  if (options.nativeInput && options.nativeOutput) {
+    throw new Error("Native ETH cannot be both input and output");
+  }
+
   return allocations.map((allocation) => {
     const router = allocation.route.hops[0]?.pool.dex.router;
     if (!router) {
@@ -36,22 +66,78 @@ export function buildSwapCalls(
       );
     }
     const path = routePath(allocation);
-    const data = encodeFunctionData({
-      abi: UNISWAP_V2_ROUTER_ABI,
-      functionName: "swapExactTokensForTokens",
-      args: [allocation.amountIn, allocation.minAmountOut, path, recipient, deadlineSeconds],
+    const data = encodeSwapData({
+      allocation,
+      deadlineSeconds,
+      nativeInput: Boolean(options.nativeInput),
+      nativeOutput: Boolean(options.nativeOutput),
+      path,
+      recipient,
     });
 
     return {
       router,
       to: router,
       data,
-      value: "0x0",
+      value: options.nativeInput ? toHexValue(allocation.amountIn) : "0x0",
+      requiresApproval: !options.nativeInput,
       routeId: allocation.route.id,
       amountIn: allocation.amountIn.toString(),
       minAmountOut: allocation.minAmountOut.toString(),
     };
   });
+}
+
+function encodeSwapData(params: {
+  allocation: RouteAllocation;
+  deadlineSeconds: bigint;
+  nativeInput: boolean;
+  nativeOutput: boolean;
+  path: Address[];
+  recipient: Address;
+}): Hex {
+  if (params.nativeInput) {
+    return encodeFunctionData({
+      abi: UNISWAP_V2_ROUTER_ABI,
+      functionName: "swapExactETHForTokens",
+      args: [
+        params.allocation.minAmountOut,
+        params.path,
+        params.recipient,
+        params.deadlineSeconds,
+      ],
+    });
+  }
+
+  if (params.nativeOutput) {
+    return encodeFunctionData({
+      abi: UNISWAP_V2_ROUTER_ABI,
+      functionName: "swapExactTokensForETH",
+      args: [
+        params.allocation.amountIn,
+        params.allocation.minAmountOut,
+        params.path,
+        params.recipient,
+        params.deadlineSeconds,
+      ],
+    });
+  }
+
+  return encodeFunctionData({
+    abi: UNISWAP_V2_ROUTER_ABI,
+    functionName: "swapExactTokensForTokens",
+    args: [
+      params.allocation.amountIn,
+      params.allocation.minAmountOut,
+      params.path,
+      params.recipient,
+      params.deadlineSeconds,
+    ],
+  });
+}
+
+function toHexValue(amount: bigint): Hex {
+  return `0x${amount.toString(16)}`;
 }
 
 function routePath(allocation: RouteAllocation): Address[] {

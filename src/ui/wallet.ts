@@ -196,7 +196,7 @@ export async function sendSwapCall(params: {
     chain: mainnet,
     to: params.call.to,
     data: params.call.data,
-    value: 0n,
+    value: BigInt(params.call.value),
   });
   await publicClient.waitForTransactionReceipt({ hash });
   return hash;

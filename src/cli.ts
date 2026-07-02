@@ -1,7 +1,12 @@
 import "dotenv/config";
 import { getAddress, isAddress } from "viem";
 import { buildDemoPools, DEMO_TOKENS } from "./config/demoPools.js";
-import { MAINNET_TOKENS, MAINNET_V2_DEXES } from "./config/mainnet.js";
+import {
+  MAINNET_POOL_TOKENS,
+  MAINNET_TOKENS,
+  MAINNET_V2_DEXES,
+  isNativeToken,
+} from "./config/mainnet.js";
 import { loadMainnetV2Pools } from "./adapters/onchainV2.js";
 import { buildSmartRouteQuote } from "./router.js";
 import { buildSwapCalls } from "./calldata.js";
@@ -14,8 +19,9 @@ type Args = Record<string, string | boolean>;
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const useLive = Boolean(args.live);
-  const tokens = useLive ? MAINNET_TOKENS : DEMO_TOKENS;
-  const pools = await loadPools(args, useLive, tokens);
+  const quoteTokens = useLive ? MAINNET_TOKENS : DEMO_TOKENS;
+  const poolTokens = useLive ? MAINNET_POOL_TOKENS : DEMO_TOKENS;
+  const pools = await loadPools(args, useLive, poolTokens);
 
   const toAddress = stringArg(args, "to-address", "");
   const request: QuoteRequest = {
@@ -28,7 +34,7 @@ async function main(): Promise<void> {
     singleRouterOnly: toAddress.length > 0,
   };
 
-  const quote = buildSmartRouteQuote(tokens, pools, request);
+  const quote = buildSmartRouteQuote(quoteTokens, pools, request);
 
   if (Boolean(args.json)) {
     printJson(quote, args);
@@ -43,7 +49,10 @@ async function main(): Promise<void> {
     }
     const deadlineMinutes = numberArg(args, "deadline-minutes", 20);
     const deadlineSeconds = BigInt(Math.floor(Date.now() / 1000) + deadlineMinutes * 60);
-    const calls = buildSwapCalls(quote.allocations, getAddress(toAddress), deadlineSeconds);
+    const calls = buildSwapCalls(quote.allocations, getAddress(toAddress), deadlineSeconds, {
+      nativeInput: isNativeToken(quote.tokenIn),
+      nativeOutput: isNativeToken(quote.tokenOut),
+    });
     console.log("\nSwap calldata");
     for (const call of calls) {
       console.log(`- router: ${call.router}`);
@@ -95,7 +104,7 @@ function printHuman(quote: SmartRouteQuote, mode: string): void {
 
   console.log("\nSelected plan");
   for (const allocation of quote.allocations) {
-    console.log(`- ${(allocation.shareBps / 100).toFixed(2)}% ${describeRoute(allocation.route)}`);
+    console.log(`- ${(allocation.shareBps / 100).toFixed(2)}% ${describeDisplayRoute(quote, allocation.route)}`);
     console.log(
       `  in/out: ${formatTokenAmount(quote.tokenIn, allocation.amountIn)} ${quote.tokenIn.symbol} -> ${formatTokenAmount(
         quote.tokenOut,
@@ -109,12 +118,28 @@ function printHuman(quote: SmartRouteQuote, mode: string): void {
   console.log("\nTop alternatives");
   for (const alternative of quote.alternatives.slice(0, 5)) {
     console.log(
-      `- ${describeRoute(alternative.route)} | out ${formatTokenAmount(
+      `- ${describeDisplayRoute(quote, alternative.route)} | out ${formatTokenAmount(
         quote.tokenOut,
         alternative.amountOut,
       )} | net-score ${formatTokenAmount(quote.tokenOut, alternative.netAmountOut)} | risk ${alternative.risk.penaltyBps} bps`,
     );
   }
+}
+
+function describeDisplayRoute(
+  quote: SmartRouteQuote,
+  route: SmartRouteQuote["allocations"][number]["route"],
+): string {
+  if (route.hops.length === 0) {
+    return describeRoute(route);
+  }
+  const labels = [
+    quote.tokenIn.symbol,
+    ...route.hops.slice(0, -1).map((hop) => hop.tokenOut.symbol),
+    quote.tokenOut.symbol,
+  ];
+  const dexes = route.hops.map((hop) => hop.pool.dex.name).join(" + ");
+  return `${labels.join(" -> ")} via ${dexes}`;
 }
 
 function printJson(quote: SmartRouteQuote, args: Args): void {

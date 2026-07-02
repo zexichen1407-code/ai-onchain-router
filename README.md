@@ -26,6 +26,7 @@ npm run dev
 - 连接浏览器注入钱包，例如 MetaMask 或 Rabby。
 - 读取 Ethereum mainnet 上 Uniswap V2 / SushiSwap V2 类池子的 reserves。
 - 生成只包含单一 router 可执行路径的智能路由。
+- 支持 native ETH 输入，例如 `ETH -> USDC`，执行时调用 `swapExactETHForTokens` 并跳过 ERC20 approval。
 - 签名当前 quote。
 - 依次发起 ERC20 approval 和 swap 交易，由钱包逐笔确认。
 

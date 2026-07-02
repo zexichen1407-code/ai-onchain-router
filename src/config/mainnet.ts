@@ -1,6 +1,13 @@
 import type { DexConfig, Token } from "../types.js";
 
-export const MAINNET_TOKENS: Token[] = [
+export const NATIVE_ETH: Token = {
+  symbol: "ETH",
+  address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+  decimals: 18,
+  chainId: 1,
+};
+
+export const MAINNET_POOL_TOKENS: Token[] = [
   {
     symbol: "WETH",
     address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
@@ -32,6 +39,23 @@ export const MAINNET_TOKENS: Token[] = [
     chainId: 1,
   },
 ];
+
+export const MAINNET_TOKENS: Token[] = [NATIVE_ETH, ...MAINNET_POOL_TOKENS];
+
+export function isNativeToken(token: Token): boolean {
+  return token.symbol === NATIVE_ETH.symbol;
+}
+
+export function wrappedTokenFor(token: Token, tokens: Token[]): Token {
+  if (!isNativeToken(token)) {
+    return token;
+  }
+  const wrapped = tokens.find((item) => item.symbol === "WETH");
+  if (!wrapped) {
+    throw new Error("WETH token is required for native ETH routing");
+  }
+  return wrapped;
+}
 
 export const MAINNET_V2_DEXES: DexConfig[] = [
   {

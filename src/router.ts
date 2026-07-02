@@ -7,6 +7,7 @@ import {
   tokenKey,
 } from "./amm.js";
 import { netAmountAfterRisk, scoreRoute } from "./risk.js";
+import { wrappedTokenFor } from "./config/mainnet.js";
 import type {
   CandidateRoute,
   PoolState,
@@ -25,9 +26,15 @@ export function buildSmartRouteQuote(
 ): SmartRouteQuote {
   const tokenIn = findToken(tokens, request.fromSymbol);
   const tokenOut = findToken(tokens, request.toSymbol);
+  const routeTokenIn = wrappedTokenFor(tokenIn, tokens);
+  const routeTokenOut = wrappedTokenFor(tokenOut, tokens);
   const amountIn = parseTokenAmount(tokenIn, request.amount);
 
-  const routes = findCandidateRoutes(pools, tokenIn, tokenOut, request.maxHops, {
+  if (tokenKey(routeTokenIn) === tokenKey(routeTokenOut)) {
+    throw new Error(`No swap route needed from ${tokenIn.symbol} to ${tokenOut.symbol}`);
+  }
+
+  const routes = findCandidateRoutes(pools, routeTokenIn, routeTokenOut, request.maxHops, {
     singleRouterOnly: Boolean(request.singleRouterOnly),
   });
   if (routes.length === 0) {

@@ -88,7 +88,8 @@ export interface SwapCall {
   router: Address;
   to: Address;
   data: Hex;
-  value: "0x0";
+  value: Hex;
+  requiresApproval: boolean;
   routeId: string;
   amountIn: string;
   minAmountOut: string;

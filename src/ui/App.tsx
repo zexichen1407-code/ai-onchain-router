@@ -13,10 +13,14 @@ import {
 } from "lucide-react";
 import { getAddress, isAddress, type Hash } from "viem";
 import { loadMainnetV2Pools } from "../adapters/onchainV2.js";
-import { describeRoute } from "../amm.js";
 import { formatTokenAmount } from "../amounts.js";
 import { buildSwapCalls } from "../calldata.js";
-import { MAINNET_TOKENS, MAINNET_V2_DEXES } from "../config/mainnet.js";
+import {
+  MAINNET_POOL_TOKENS,
+  MAINNET_TOKENS,
+  MAINNET_V2_DEXES,
+  isNativeToken,
+} from "../config/mainnet.js";
 import { buildSmartRouteQuote } from "../router.js";
 import type { SmartRouteQuote } from "../types.js";
 import {
@@ -45,9 +49,9 @@ interface FormState {
 }
 
 const initialForm: FormState = {
-  fromSymbol: "USDC",
-  toSymbol: "WETH",
-  amount: "100",
+  fromSymbol: "ETH",
+  toSymbol: "USDC",
+  amount: "0.05",
   slippageBps: "50",
   maxHops: "2",
   maxSplits: "4",
@@ -119,7 +123,7 @@ export default function App() {
       const pools = await loadMainnetV2Pools({
         rpcUrl: form.rpcUrl.trim(),
         dexes: MAINNET_V2_DEXES,
-        tokens: MAINNET_TOKENS,
+        tokens: MAINNET_POOL_TOKENS,
       });
       setPoolCount(pools.length);
       const nextQuote = buildSmartRouteQuote(MAINNET_TOKENS, pools, {
@@ -179,23 +183,31 @@ export default function App() {
       }
       const recipient = getAddress(wallet.address);
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 20 * 60);
-      const calls = buildSwapCalls(quote.allocations, recipient, deadline);
+      const nativeInput = isNativeToken(quote.tokenIn);
+      const calls = buildSwapCalls(quote.allocations, recipient, deadline, {
+        nativeInput,
+        nativeOutput: isNativeToken(quote.tokenOut),
+      });
       const hashes: Hash[] = [];
 
       for (let i = 0; i < calls.length; i += 1) {
         const allocation = quote.allocations[i];
         const call = calls[i];
-        const approvalHashes = await approveIfNeeded({
-          rpcUrl: form.rpcUrl.trim(),
-          provider: wallet.provider,
-          token: quote.tokenIn,
-          owner: wallet.address,
-          spender: call.router,
-          amount: allocation.amountIn,
-          onLog: log,
-        });
-        hashes.push(...approvalHashes);
-        setTxHashes([...hashes]);
+        if (call.requiresApproval && !nativeInput) {
+          const approvalHashes = await approveIfNeeded({
+            rpcUrl: form.rpcUrl.trim(),
+            provider: wallet.provider,
+            token: quote.tokenIn,
+            owner: wallet.address,
+            spender: call.router,
+            amount: allocation.amountIn,
+            onLog: log,
+          });
+          hashes.push(...approvalHashes);
+          setTxHashes([...hashes]);
+        } else {
+          log("Native ETH input; approval skipped");
+        }
 
         const swapHash = await sendSwapCall({
           rpcUrl: form.rpcUrl.trim(),
@@ -387,7 +399,7 @@ export default function App() {
                 {quote.allocations.map((allocation) => (
                   <article className="allocation-card" key={allocation.route.id}>
                     <div>
-                      <h3>{describeRoute(allocation.route)}</h3>
+                      <h3>{describeDisplayRoute(quote, allocation.route)}</h3>
                       <p>{allocation.risk.reasons.join("; ")}</p>
                     </div>
                     <div className="allocation-meta">
@@ -405,7 +417,7 @@ export default function App() {
                 <h3>Alternatives</h3>
                 {quote.alternatives.slice(0, 5).map((alternative) => (
                   <div className="alternative-row" key={alternative.route.id}>
-                    <span>{describeRoute(alternative.route)}</span>
+                    <span>{describeDisplayRoute(quote, alternative.route)}</span>
                     <strong>{formatTokenAmount(quote.tokenOut, alternative.amountOut)}</strong>
                   </div>
                 ))}
@@ -431,7 +443,7 @@ export default function App() {
           </button>
           <button className="danger-button full-width" onClick={handleSwap} disabled={isBusy || !wallet || !quote}>
             <Play size={16} />
-            Approve & Swap
+            {quote && isNativeToken(quote.tokenIn) ? "Swap" : "Approve & Swap"}
           </button>
 
           {signature ? (
@@ -492,6 +504,19 @@ function quoteMessage(quote: SmartRouteQuote, walletAddress: string): string {
     `Block: ${quote.blockNumber?.toString() ?? "unknown"}`,
     `Generated: ${quote.generatedAt}`,
   ].join("\n");
+}
+
+function describeDisplayRoute(
+  quote: SmartRouteQuote,
+  route: SmartRouteQuote["allocations"][number]["route"],
+): string {
+  const labels = [
+    quote.tokenIn.symbol,
+    ...route.hops.slice(0, -1).map((hop) => hop.tokenOut.symbol),
+    quote.tokenOut.symbol,
+  ];
+  const dexes = route.hops.map((hop) => hop.pool.dex.name).join(" + ");
+  return `${labels.join(" -> ")} via ${dexes}`;
 }
 
 function errorMessage(error: unknown): string {
