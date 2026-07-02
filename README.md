@@ -28,6 +28,7 @@ npm run dev
 - 生成只包含单一 router 可执行路径的智能路由。
 - 支持 native ETH 输入，例如 `ETH -> USDC`，执行时调用 `swapExactETHForTokens` 并跳过 ERC20 approval。
 - 展示 `AI Analysis`：评分公式、候选路线排名、risk-adjusted score、流动性冲击和 route 选择理由。
+- `AI Strategy` 会参与真实路由决策：`Max Output` 追求最大输出，`Balanced` 平衡输出和风险，`Conservative` 更重地惩罚高风险路径。
 - 签名当前 quote。
 - 依次发起 ERC20 approval 和 swap 交易，由钱包逐笔确认。
 

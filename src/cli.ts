@@ -32,6 +32,7 @@ async function main(): Promise<void> {
     maxHops: numberArg(args, "max-hops", 2),
     maxSplits: numberArg(args, "splits", 8),
     singleRouterOnly: toAddress.length > 0,
+    aiPolicy: aiPolicyArg(args),
   };
 
   const quote = buildSmartRouteQuote(quoteTokens, pools, request);
@@ -101,6 +102,7 @@ function printHuman(quote: SmartRouteQuote, mode: string): void {
       quote.minAmountOut,
     )} ${quote.tokenOut.symbol}`,
   );
+  console.log(`AI policy: ${quote.aiPolicy.label} - ${quote.aiPolicy.description}`);
 
   console.log("\nSelected plan");
   for (const allocation of quote.allocations) {
@@ -121,7 +123,7 @@ function printHuman(quote: SmartRouteQuote, mode: string): void {
       `- ${describeDisplayRoute(quote, alternative.route)} | out ${formatTokenAmount(
         quote.tokenOut,
         alternative.amountOut,
-      )} | net-score ${formatTokenAmount(quote.tokenOut, alternative.netAmountOut)} | risk ${alternative.risk.penaltyBps} bps`,
+      )} | ai-score ${formatTokenAmount(quote.tokenOut, alternative.netAmountOut)} | ai-penalty ${alternative.aiScore.penaltyBps} bps`,
     );
   }
 }
@@ -209,6 +211,14 @@ function numberArg(args: Args, key: string, fallback: number): number {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function aiPolicyArg(args: Args): QuoteRequest["aiPolicy"] {
+  const value = stringArg(args, "ai-policy", "balanced");
+  if (value === "max-output" || value === "balanced" || value === "conservative") {
+    return value;
+  }
+  throw new Error("--ai-policy must be max-output, balanced, or conservative");
 }
 
 main().catch((error: unknown) => {

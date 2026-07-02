@@ -45,6 +45,21 @@ export interface RiskScore {
   reasons: string[];
 }
 
+export type AiRoutingPolicyId = "max-output" | "balanced" | "conservative";
+
+export interface AiRoutingPolicy {
+  id: AiRoutingPolicyId;
+  label: string;
+  description: string;
+  riskMultiplierBps: number;
+}
+
+export interface AiRouteScore {
+  scoreAmountOut: bigint;
+  penaltyBps: number;
+  reasons: string[];
+}
+
 export interface RouteAllocation {
   route: CandidateRoute;
   amountIn: bigint;
@@ -52,6 +67,7 @@ export interface RouteAllocation {
   minAmountOut: bigint;
   shareBps: number;
   risk: RiskScore;
+  aiScore: AiRouteScore;
 }
 
 export interface RouteAlternative {
@@ -59,6 +75,7 @@ export interface RouteAlternative {
   amountOut: bigint;
   risk: RiskScore;
   netAmountOut: bigint;
+  aiScore: AiRouteScore;
 }
 
 export interface SmartRouteQuote {
@@ -68,6 +85,7 @@ export interface SmartRouteQuote {
   amountOut: bigint;
   minAmountOut: bigint;
   slippageBps: number;
+  aiPolicy: AiRoutingPolicy;
   allocations: RouteAllocation[];
   alternatives: RouteAlternative[];
   generatedAt: string;
@@ -82,6 +100,7 @@ export interface QuoteRequest {
   maxHops: number;
   maxSplits: number;
   singleRouterOnly?: boolean;
+  aiPolicy?: AiRoutingPolicyId;
 }
 
 export interface SwapCall {

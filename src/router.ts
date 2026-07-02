@@ -6,9 +6,11 @@ import {
   simulateRouteExactIn,
   tokenKey,
 } from "./amm.js";
-import { netAmountAfterRisk, scoreRoute } from "./risk.js";
+import { scoreRoute } from "./risk.js";
 import { wrappedTokenFor } from "./config/mainnet.js";
+import { getAiRoutingPolicy, scoreRouteWithPolicy } from "./aiPolicy.js";
 import type {
+  AiRoutingPolicy,
   CandidateRoute,
   PoolState,
   QuoteRequest,
@@ -29,6 +31,7 @@ export function buildSmartRouteQuote(
   const routeTokenIn = wrappedTokenFor(tokenIn, tokens);
   const routeTokenOut = wrappedTokenFor(tokenOut, tokens);
   const amountIn = parseTokenAmount(tokenIn, request.amount);
+  const aiPolicy = getAiRoutingPolicy(request.aiPolicy);
 
   if (tokenKey(routeTokenIn) === tokenKey(routeTokenOut)) {
     throw new Error(`No swap route needed from ${tokenIn.symbol} to ${tokenOut.symbol}`);
@@ -45,11 +48,18 @@ export function buildSmartRouteQuote(
     .map((route): RouteAlternative => {
       const amountOut = simulateRouteExactIn(route, amountIn);
       const risk = scoreRoute(route, amountIn);
+      const aiScore = scoreRouteWithPolicy({
+        amountOut,
+        policy: aiPolicy,
+        risk,
+        route,
+      });
       return {
         route,
         amountOut,
         risk,
-        netAmountOut: netAmountAfterRisk(amountOut, risk),
+        netAmountOut: aiScore.scoreAmountOut,
+        aiScore,
       };
     })
     .filter((alternative) => alternative.amountOut > 0n)
@@ -59,19 +69,31 @@ export function buildSmartRouteQuote(
     throw new Error(`Routes exist, but all quoted outputs are zero`);
   }
 
-  const splitPlan = allocateGreedy(alternatives.map((item) => item.route), amountIn, request.maxSplits);
+  const splitPlan = allocateGreedy(
+    alternatives.map((item) => item.route),
+    amountIn,
+    request.maxSplits,
+    aiPolicy,
+  );
   const allocations = splitPlan
     .filter((allocation) => allocation.amountIn > 0n && allocation.amountOut > 0n)
     .map((allocation): RouteAllocation => {
       const risk = scoreRoute(allocation.route, allocation.amountIn);
+      const aiScore = scoreRouteWithPolicy({
+        amountOut: allocation.amountOut,
+        policy: aiPolicy,
+        risk,
+        route: allocation.route,
+      });
       return {
         ...allocation,
         minAmountOut: applyBps(allocation.amountOut, 10_000 - request.slippageBps),
         shareBps: Number((allocation.amountIn * 10_000n) / amountIn),
         risk,
+        aiScore,
       };
     })
-    .sort((a, b) => compareBigintDesc(a.amountOut, b.amountOut));
+    .sort((a, b) => compareBigintDesc(a.aiScore.scoreAmountOut, b.aiScore.scoreAmountOut));
 
   const amountOut = sumBigints(allocations.map((allocation) => allocation.amountOut));
   const minAmountOut = sumBigints(allocations.map((allocation) => allocation.minAmountOut));
@@ -84,6 +106,7 @@ export function buildSmartRouteQuote(
     amountOut,
     minAmountOut,
     slippageBps: request.slippageBps,
+    aiPolicy,
     allocations,
     alternatives: alternatives.slice(0, 8),
     generatedAt: new Date().toISOString(),
@@ -150,7 +173,8 @@ function allocateGreedy(
   routes: CandidateRoute[],
   totalAmountIn: bigint,
   requestedSplits: number,
-): Array<Omit<RouteAllocation, "minAmountOut" | "shareBps" | "risk">> {
+  aiPolicy: AiRoutingPolicy,
+): Array<Omit<RouteAllocation, "minAmountOut" | "shareBps" | "risk" | "aiScore">> {
   const splitCount = normalizeSplitCount(totalAmountIn, requestedSplits);
   const baseChunk = totalAmountIn / BigInt(splitCount);
   const remainder = totalAmountIn % BigInt(splitCount);
@@ -165,11 +189,23 @@ function allocateGreedy(
   for (let i = 0; i < splitCount; i += 1) {
     const chunk = baseChunk + (BigInt(i) < remainder ? 1n : 0n);
     let bestIndex = -1;
+    let bestScore = 0n;
     let bestOutput = 0n;
 
     for (let j = 0; j < states.length; j += 1) {
       const quoted = simulateRouteExactIn(states[j].route, chunk);
-      if (quoted > bestOutput) {
+      const risk = scoreRoute(states[j].route, chunk);
+      const aiScore = scoreRouteWithPolicy({
+        amountOut: quoted,
+        policy: aiPolicy,
+        risk,
+        route: states[j].route,
+      });
+      if (
+        aiScore.scoreAmountOut > bestScore ||
+        (aiScore.scoreAmountOut === bestScore && quoted > bestOutput)
+      ) {
+        bestScore = aiScore.scoreAmountOut;
         bestOutput = quoted;
         bestIndex = j;
       }

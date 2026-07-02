@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { getAddress, isAddress, type Hash } from "viem";
 import { loadMainnetV2Pools } from "../adapters/onchainV2.js";
+import { AI_ROUTING_POLICIES } from "../aiPolicy.js";
 import { formatTokenAmount } from "../amounts.js";
 import { buildSwapCalls } from "../calldata.js";
 import {
@@ -23,7 +24,7 @@ import {
   isNativeToken,
 } from "../config/mainnet.js";
 import { buildSmartRouteQuote } from "../router.js";
-import type { SmartRouteQuote } from "../types.js";
+import type { AiRoutingPolicyId, SmartRouteQuote } from "../types.js";
 import {
   approveIfNeeded,
   connectInjectedWallet,
@@ -46,6 +47,7 @@ interface FormState {
   slippageBps: string;
   maxHops: string;
   maxSplits: string;
+  aiPolicy: AiRoutingPolicyId;
   rpcUrl: string;
 }
 
@@ -56,6 +58,7 @@ const initialForm: FormState = {
   slippageBps: "50",
   maxHops: "2",
   maxSplits: "4",
+  aiPolicy: "balanced",
   rpcUrl: DEFAULT_RPC,
 };
 
@@ -135,6 +138,7 @@ export default function App() {
         maxHops: Number(form.maxHops),
         maxSplits: Number(form.maxSplits),
         singleRouterOnly: true,
+        aiPolicy: form.aiPolicy,
       });
       setQuote(nextQuote);
       setStatus("Quote ready");
@@ -353,6 +357,22 @@ export default function App() {
           </label>
 
           <label>
+            <span>AI Strategy</span>
+            <select
+              value={form.aiPolicy}
+              onChange={(event) =>
+                patchForm({ aiPolicy: event.target.value as AiRoutingPolicyId })
+              }
+            >
+              {Object.values(AI_ROUTING_POLICIES).map((policy) => (
+                <option key={policy.id} value={policy.id}>
+                  {policy.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
             <span>RPC</span>
             <input value={form.rpcUrl} onChange={(event) => patchForm({ rpcUrl: event.target.value })} />
           </label>
@@ -424,8 +444,9 @@ export default function App() {
                 </div>
 
                 <p className="analysis-formula">
-                  net score = expected output x (10000 - risk penalty bps) / 10000
+                  {quote.aiPolicy.label}: AI score = expected output x (10000 - AI penalty bps) / 10000
                 </p>
+                <p className="analysis-policy-copy">{quote.aiPolicy.description}</p>
 
                 <div className="analysis-metrics">
                   {analysisMetrics(quote).map((metric) => (
@@ -454,13 +475,13 @@ export default function App() {
                             {quote.tokenOut.symbol}
                           </span>
                           <span>
-                            net {formatTokenAmount(quote.tokenOut, alternative.netAmountOut)}{" "}
+                            AI score {formatTokenAmount(quote.tokenOut, alternative.netAmountOut)}{" "}
                             {quote.tokenOut.symbol}
                           </span>
-                          <span>penalty {alternative.risk.penaltyBps} bps</span>
+                          <span>AI penalty {alternative.aiScore.penaltyBps} bps</span>
                           <span>impact {formatBps(alternative.risk.features.maxTradePressureBps)}</span>
                         </div>
-                        <p>{alternative.risk.reasons.join("; ")}</p>
+                        <p>{alternative.aiScore.reasons.join("; ")}</p>
                       </div>
                     </article>
                   ))}
@@ -584,7 +605,7 @@ function buildDecisionSummary(quote: SmartRouteQuote): string {
     return `Selected ${routeName} because it is the only executable route with positive output.`;
   }
   const edge = best.netAmountOut > second.netAmountOut ? best.netAmountOut - second.netAmountOut : 0n;
-  return `Selected ${routeName}; its risk-adjusted score leads the next route by ${formatTokenAmount(
+  return `Selected ${routeName}; ${quote.aiPolicy.label} AI score leads the next route by ${formatTokenAmount(
     quote.tokenOut,
     edge,
   )} ${quote.tokenOut.symbol}.`;
@@ -605,8 +626,8 @@ function analysisMetrics(quote: SmartRouteQuote): Array<{ label: string; value: 
       value: `${formatTokenAmount(quote.tokenOut, best.netAmountOut)} ${quote.tokenOut.symbol}`,
     },
     {
-      label: "Penalty",
-      value: `${best.risk.penaltyBps} bps`,
+      label: "AI penalty",
+      value: `${best.aiScore.penaltyBps} bps`,
     },
     {
       label: "Hops",

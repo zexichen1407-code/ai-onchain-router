@@ -360,6 +360,13 @@ select:focus {
   line-height: 1.45;
 }
 
+.analysis-policy-copy {
+  margin-top: 8px;
+  color: #566073;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .analysis-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
