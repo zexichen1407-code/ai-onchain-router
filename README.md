@@ -27,6 +27,7 @@ npm run dev
 - 读取 Ethereum mainnet 上 Uniswap V2 / SushiSwap V2 类池子的 reserves。
 - 生成只包含单一 router 可执行路径的智能路由。
 - 支持 native ETH 输入，例如 `ETH -> USDC`，执行时调用 `swapExactETHForTokens` 并跳过 ERC20 approval。
+- 展示 `AI Analysis`：评分公式、候选路线排名、risk-adjusted score、流动性冲击和 route 选择理由。
 - 签名当前 quote。
 - 依次发起 ERC20 approval 和 swap 交易，由钱包逐笔确认。
 

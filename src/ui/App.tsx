@@ -9,6 +9,7 @@ import {
   Route,
   Send,
   ShieldCheck,
+  Sparkles,
   Wallet,
 } from "lucide-react";
 import { getAddress, isAddress, type Hash } from "viem";
@@ -413,6 +414,59 @@ export default function App() {
                 ))}
               </div>
 
+              <section className="ai-analysis">
+                <div className="analysis-heading">
+                  <div>
+                    <span>AI Analysis</span>
+                    <h3>{buildDecisionSummary(quote)}</h3>
+                  </div>
+                  <Sparkles size={18} />
+                </div>
+
+                <p className="analysis-formula">
+                  net score = expected output x (10000 - risk penalty bps) / 10000
+                </p>
+
+                <div className="analysis-metrics">
+                  {analysisMetrics(quote).map((metric) => (
+                    <div key={metric.label}>
+                      <span>{metric.label}</span>
+                      <strong>{metric.value}</strong>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="analysis-ranking">
+                  {quote.alternatives.slice(0, 5).map((alternative, index) => (
+                    <article
+                      className={index === 0 ? "analysis-row selected" : "analysis-row"}
+                      key={alternative.route.id}
+                    >
+                      <div className="rank-index">{index + 1}</div>
+                      <div className="rank-body">
+                        <div className="rank-title">
+                          <strong>{describeDisplayRoute(quote, alternative.route)}</strong>
+                          <span>{index === 0 ? "Selected" : "Candidate"}</span>
+                        </div>
+                        <div className="rank-grid">
+                          <span>
+                            expected {formatTokenAmount(quote.tokenOut, alternative.amountOut)}{" "}
+                            {quote.tokenOut.symbol}
+                          </span>
+                          <span>
+                            net {formatTokenAmount(quote.tokenOut, alternative.netAmountOut)}{" "}
+                            {quote.tokenOut.symbol}
+                          </span>
+                          <span>penalty {alternative.risk.penaltyBps} bps</span>
+                          <span>impact {formatBps(alternative.risk.features.maxTradePressureBps)}</span>
+                        </div>
+                        <p>{alternative.risk.reasons.join("; ")}</p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
               <div className="alternatives">
                 <h3>Alternatives</h3>
                 {quote.alternatives.slice(0, 5).map((alternative) => (
@@ -517,6 +571,63 @@ function describeDisplayRoute(
   ];
   const dexes = route.hops.map((hop) => hop.pool.dex.name).join(" + ");
   return `${labels.join(" -> ")} via ${dexes}`;
+}
+
+function buildDecisionSummary(quote: SmartRouteQuote): string {
+  const best = quote.alternatives[0];
+  if (!best) {
+    return "No route scored yet";
+  }
+  const second = quote.alternatives[1];
+  const routeName = describeDisplayRoute(quote, best.route);
+  if (!second) {
+    return `Selected ${routeName} because it is the only executable route with positive output.`;
+  }
+  const edge = best.netAmountOut > second.netAmountOut ? best.netAmountOut - second.netAmountOut : 0n;
+  return `Selected ${routeName}; its risk-adjusted score leads the next route by ${formatTokenAmount(
+    quote.tokenOut,
+    edge,
+  )} ${quote.tokenOut.symbol}.`;
+}
+
+function analysisMetrics(quote: SmartRouteQuote): Array<{ label: string; value: string }> {
+  const best = quote.alternatives[0];
+  if (!best) {
+    return [];
+  }
+  return [
+    {
+      label: "Expected",
+      value: `${formatTokenAmount(quote.tokenOut, best.amountOut)} ${quote.tokenOut.symbol}`,
+    },
+    {
+      label: "Risk-adjusted",
+      value: `${formatTokenAmount(quote.tokenOut, best.netAmountOut)} ${quote.tokenOut.symbol}`,
+    },
+    {
+      label: "Penalty",
+      value: `${best.risk.penaltyBps} bps`,
+    },
+    {
+      label: "Hops",
+      value: String(best.risk.features.hopCount ?? best.route.hops.length),
+    },
+    {
+      label: "Reserve impact",
+      value: formatBps(best.risk.features.maxTradePressureBps),
+    },
+    {
+      label: "DEX risk",
+      value: `${best.risk.features.dexRiskBps ?? 0} bps`,
+    },
+  ];
+}
+
+function formatBps(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) {
+    return "0.00%";
+  }
+  return `${(value / 100).toFixed(2)}%`;
 }
 
 function errorMessage(error: unknown): string {
