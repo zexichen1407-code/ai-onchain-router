@@ -1,0 +1,27 @@
+{
+  "name": "ai-onchain-router",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Explainable AI-style smart order router for EVM DEX liquidity.",
+  "scripts": {
+    "demo": "tsx src/cli.ts --demo --from USDC --to WETH --amount 25000 --max-hops 2 --splits 8",
+    "quote": "tsx src/cli.ts",
+    "live": "tsx src/cli.ts --live",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "viem": "^2.23.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.9"
+  },
+  "overrides": {
+    "ws": "^8.21.0"
+  }
+}
