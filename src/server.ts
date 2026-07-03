@@ -1,11 +1,17 @@
 import "dotenv/config";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { ProxyAgent, setGlobalDispatcher } from "undici";
 import { createServer as createViteServer } from "vite";
 import type { AiAdvisorRequest } from "./aiAdvisor.js";
 import { isAiAdvisorResponse, isPolicy } from "./aiAdvisor.js";
 
 const host = "127.0.0.1";
 const port = Number(process.env.AI_ADVISOR_PORT ?? 5173);
+const proxyUrl = process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY;
+
+if (proxyUrl) {
+  setGlobalDispatcher(new ProxyAgent(proxyUrl));
+}
 
 const vite = await createViteServer({
   appType: "spa",

@@ -39,6 +39,8 @@ CLOUDFLARE_API_TOKEN=你的-workers-ai-token
 CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fast
 ```
 
+如果本机需要代理访问 Cloudflare，可以在 `.env` 里加 `HTTPS_PROXY=http://127.0.0.1:7897`，后端会自动使用它。
+
 不配置 key 时，页面仍可正常 quote 和 swap，但 `Ask AI Advisor` 会显示配置提示。Cloudflare Workers AI 免费额度是每天 10,000 Neurons，超过免费额度需要升级 Workers Paid plan。
 
 打开 Vite 给出的本地地址。页面支持：
