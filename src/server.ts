@@ -33,11 +33,17 @@ server.listen(port, host, () => {
 });
 
 async function handleAiAdvice(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey || apiKey === "your-groq-key") {
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  if (
+    !apiToken ||
+    !accountId ||
+    apiToken === "your-cloudflare-workers-ai-token" ||
+    accountId === "your-cloudflare-account-id"
+  ) {
     writeJson(res, 501, {
       error: "AI Advisor is not configured.",
-      setupHint: "Set GROQ_API_KEY in .env and restart npm run dev.",
+      setupHint: "Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in .env, then restart npm run dev.",
     });
     return;
   }
@@ -45,7 +51,7 @@ async function handleAiAdvice(req: IncomingMessage, res: ServerResponse): Promis
   const request = JSON.parse(await readBody(req)) as AiAdvisorRequest;
   validateAdvisorRequest(request);
 
-  const parsed = await askGroqAdvisor(apiKey, request);
+  const parsed = await askCloudflareAdvisor(accountId, apiToken, request);
   if (!isAiAdvisorResponse(parsed)) {
     throw new Error("AI Advisor returned an invalid response shape");
   }
@@ -61,8 +67,12 @@ async function handleAiAdvice(req: IncomingMessage, res: ServerResponse): Promis
   writeJson(res, 200, parsed);
 }
 
-async function askGroqAdvisor(apiKey: string, request: AiAdvisorRequest): Promise<unknown> {
-  const model = process.env.GROQ_MODEL ?? "llama-3.1-8b-instant";
+async function askCloudflareAdvisor(
+  accountId: string,
+  apiToken: string,
+  request: AiAdvisorRequest,
+): Promise<unknown> {
+  const model = process.env.CLOUDFLARE_AI_MODEL ?? "@cf/meta/llama-3.1-8b-instruct-fast";
   const prompt = JSON.stringify({
     task: "Choose a routing policy and route from the candidates. Explain tradeoffs.",
     rules: [
@@ -89,38 +99,44 @@ async function askGroqAdvisor(apiKey: string, request: AiAdvisorRequest): Promis
     request,
   });
 
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/v1/chat/completions`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an on-chain DEX smart order routing advisor. Return valid JSON only. Never output markdown.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        temperature: 0.2,
+        max_tokens: 1200,
+        response_format: {
+          type: "json_schema",
+          json_schema: advisorResponseSchema,
+        },
+      }),
     },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an on-chain DEX smart order routing advisor. Return valid JSON only. Never output markdown.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.2,
-      max_completion_tokens: 1200,
-      response_format: { type: "json_object" },
-    }),
-  });
+  );
 
-  const payload = (await response.json()) as GroqChatCompletionResponse | GroqErrorResponse;
+  const payload = (await response.json()) as CloudflareChatCompletionResponse | CloudflareErrorResponse;
   if (!response.ok) {
-    throw new Error(groqErrorMessage(payload));
+    throw new Error(cloudflareErrorMessage(payload));
   }
   const text = "choices" in payload ? payload.choices?.[0]?.message?.content : undefined;
   if (!text) {
-    throw new Error("Groq Advisor returned no text");
+    throw new Error("Cloudflare Advisor returned no text");
   }
   return parseAdvisorJson(text);
 }
@@ -147,7 +163,40 @@ function parseAdvisorJson(text: string): unknown {
   }
 }
 
-interface GroqChatCompletionResponse {
+const advisorResponseSchema = {
+  type: "object",
+  properties: {
+    recommendedPolicy: { type: "string", enum: ["max-output", "balanced", "conservative"] },
+    recommendedRouteId: { type: "string" },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+    thesis: { type: "string" },
+    routeNotes: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          routeId: { type: "string" },
+          verdict: { type: "string", enum: ["prefer", "acceptable", "avoid"] },
+          reason: { type: "string" },
+        },
+        required: ["routeId", "verdict", "reason"],
+      },
+    },
+    warnings: { type: "array", items: { type: "string" } },
+    actionConstraints: { type: "array", items: { type: "string" } },
+  },
+  required: [
+    "recommendedPolicy",
+    "recommendedRouteId",
+    "confidence",
+    "thesis",
+    "routeNotes",
+    "warnings",
+    "actionConstraints",
+  ],
+};
+
+interface CloudflareChatCompletionResponse {
   choices?: Array<{
     message?: {
       content?: string | null;
@@ -155,17 +204,23 @@ interface GroqChatCompletionResponse {
   }>;
 }
 
-interface GroqErrorResponse {
+interface CloudflareErrorResponse {
   error?: {
     message?: string;
   };
+  errors?: Array<{
+    message?: string;
+  }>;
 }
 
-function groqErrorMessage(payload: GroqChatCompletionResponse | GroqErrorResponse): string {
+function cloudflareErrorMessage(payload: CloudflareChatCompletionResponse | CloudflareErrorResponse): string {
   if ("error" in payload && payload.error?.message) {
-    return `Groq Advisor failed: ${payload.error.message}`;
+    return `Cloudflare Advisor failed: ${payload.error.message}`;
   }
-  return "Groq Advisor failed";
+  if ("errors" in payload && payload.errors?.[0]?.message) {
+    return `Cloudflare Advisor failed: ${payload.errors[0].message}`;
+  }
+  return "Cloudflare Advisor failed";
 }
 
 async function readBody(req: IncomingMessage): Promise<string> {

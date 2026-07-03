@@ -546,7 +546,7 @@ export default function App() {
                   <div className="advisor-action-row">
                     <div>
                       <span>LLM Advisor</span>
-                      <strong>Groq review over the candidate routes</strong>
+                      <strong>Cloudflare Workers AI review over the candidate routes</strong>
                     </div>
                     <button
                       className="secondary-button"
