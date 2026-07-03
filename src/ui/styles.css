@@ -561,6 +561,87 @@ select:focus {
   gap: 8px;
 }
 
+.execution-gate {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #c7d7fe;
+  border-radius: 8px;
+  background: #f4f7ff;
+  padding: 10px;
+}
+
+.execution-gate.adjust {
+  border-color: #fedf89;
+  background: #fffbeb;
+}
+
+.execution-gate.avoid {
+  border-color: #f5c2bd;
+  background: #fff5f4;
+}
+
+.execution-gate span,
+.scenario-grid span {
+  display: block;
+  margin-bottom: 5px;
+  color: #697284;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.execution-gate strong {
+  color: #111827;
+  font-size: 14px;
+}
+
+.execution-gate p,
+.execution-gate em,
+.execution-gate small {
+  color: #253044;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.execution-gate small {
+  color: #1b4fd7;
+}
+
+.scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scenario-grid article {
+  display: grid;
+  gap: 7px;
+  border: 1px solid #dce2ec;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.scenario-grid strong {
+  display: block;
+  color: #111827;
+  font-size: 13px;
+}
+
+.scenario-grid p,
+.scenario-grid em,
+.scenario-grid small {
+  color: #566073;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.scenario-grid small {
+  color: #1b4fd7;
+}
+
 .advisor-notes p,
 .advisor-list p {
   margin-top: 5px;
@@ -706,6 +787,7 @@ select:focus {
   .allocation-card,
   .analysis-metrics,
   .analysis-row,
+  .scenario-grid,
   .rank-grid,
   .advisor-action-row,
   .advisor-summary,

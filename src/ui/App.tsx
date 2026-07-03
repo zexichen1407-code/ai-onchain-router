@@ -572,7 +572,35 @@ export default function App() {
                           <strong>{Math.round(advisor.confidence * 100)}%</strong>
                         </div>
                       </div>
+                      <div className="advisor-list">
+                        <span>AI 额外贡献</span>
+                        <p>{advisor.aiContribution}</p>
+                      </div>
+                      <div className={`execution-gate ${advisor.executionGate.decision}`}>
+                        <div>
+                          <span>AI 执行闸门</span>
+                          <strong>{formatExecutionDecision(advisor.executionGate.decision)}</strong>
+                        </div>
+                        <p>{advisor.executionGate.reason}</p>
+                        <em>建议滑点：{advisor.executionGate.suggestedSlippageBps} 基点</em>
+                        {advisor.executionGate.mustCheck.map((item) => (
+                          <small key={item}>{item}</small>
+                        ))}
+                      </div>
                       <p>{advisor.thesis}</p>
+                      <div className="scenario-grid">
+                        {advisor.scenarios.map((scenario) => (
+                          <article key={`${scenario.scenario}-${scenario.preferredRouteId}`}>
+                            <div>
+                              <span>{formatSeverity(scenario.severity)}</span>
+                              <strong>{scenario.scenario}</strong>
+                            </div>
+                            <p>{scenario.impact}</p>
+                            <em>{scenario.action}</em>
+                            <small>该场景偏好：{routeNameForId(quote, scenario.preferredRouteId)}</small>
+                          </article>
+                        ))}
+                      </div>
                       <div className="advisor-notes">
                         {advisor.routeNotes.slice(0, 4).map((note) => (
                           <article key={`${note.routeId}-${note.verdict}`}>
@@ -776,6 +804,34 @@ function buildAiAdvisorRequest(quote: SmartRouteQuote) {
       slippageBps: quote.slippageBps,
       selectedPolicy: quote.aiPolicy.id,
     },
+    executionContext: {
+      chain: "Ethereum mainnet",
+      tradeType: `${quote.tokenIn.symbol} 兑换 ${quote.tokenOut.symbol}`,
+      selectedByDeterministicScore: quote.alternatives[0]?.route.id ?? "",
+      safetyGoal: "在输出、滑点、MEV、流动性冲击和执行失败风险之间做交易前判断。",
+    },
+    stressTests: [
+      {
+        scenario: "MEV / 夹子风险",
+        question: "如果交易被公开内存池观察到，哪条路线更不容易因为多跳或薄流动性被夹？",
+      },
+      {
+        scenario: "流动性冲击",
+        question: "如果最大池子的可用储备突然减少，哪条路线的输出更稳？",
+      },
+      {
+        scenario: "gas 拥堵与失败重试",
+        question: "如果 gas 突然升高或某一跳失败，是否应该选择更简单的单一路线？",
+      },
+      {
+        scenario: "滑点不足",
+        question: "当前滑点基点是否足够，是否需要调整后再签名？",
+      },
+      {
+        scenario: "RPC 数据陈旧",
+        question: "如果报价区块已经落后，用户签名前应该重新报价还是继续？",
+      },
+    ],
     selectedRouteId: quote.allocations[0]?.route.id ?? quote.alternatives[0]?.route.id ?? "",
     routes: quote.alternatives.slice(0, 8).map((alternative) => ({
       routeId: alternative.route.id,
@@ -812,6 +868,26 @@ function formatAdvisorVerdict(verdict: AiAdvisorResponse["routeNotes"][number]["
     return "可接受";
   }
   return "避开";
+}
+
+function formatExecutionDecision(decision: AiAdvisorResponse["executionGate"]["decision"]): string {
+  if (decision === "execute") {
+    return "可以执行";
+  }
+  if (decision === "adjust") {
+    return "先调整";
+  }
+  return "暂缓交易";
+}
+
+function formatSeverity(severity: AiAdvisorResponse["scenarios"][number]["severity"]): string {
+  if (severity === "high") {
+    return "高风险";
+  }
+  if (severity === "medium") {
+    return "中风险";
+  }
+  return "低风险";
 }
 
 function isPositiveStatus(status: string): boolean {
