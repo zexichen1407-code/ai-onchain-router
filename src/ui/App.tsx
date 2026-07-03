@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { getAddress, isAddress, type Hash } from "viem";
 import { loadMainnetV2Pools } from "../adapters/onchainV2.js";
+import type { AiAdvisorError, AiAdvisorResponse } from "../aiAdvisor.js";
+import { isAiAdvisorResponse } from "../aiAdvisor.js";
 import { AI_ROUTING_POLICIES } from "../aiPolicy.js";
 import { formatTokenAmount } from "../amounts.js";
 import { buildSwapCalls } from "../calldata.js";
@@ -72,6 +74,9 @@ export default function App() {
   const [signature, setSignature] = useState<string | null>(null);
   const [txHashes, setTxHashes] = useState<Hash[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
+  const [advisor, setAdvisor] = useState<AiAdvisorResponse | null>(null);
+  const [advisorError, setAdvisorError] = useState("");
+  const [advisorBusy, setAdvisorBusy] = useState(false);
 
   const tokenOptions = useMemo(() => MAINNET_TOKENS.map((token) => token.symbol), []);
   const isBusy = busy !== "idle";
@@ -122,6 +127,8 @@ export default function App() {
       setBusy("quote");
       setStatus("Loading pools");
       setQuote(null);
+      setAdvisor(null);
+      setAdvisorError("");
       setSignature(null);
       setTxHashes([]);
       const pools = await loadMainnetV2Pools({
@@ -232,6 +239,54 @@ export default function App() {
     } finally {
       setBusy("idle");
     }
+  }
+
+  async function handleAskAiAdvisor() {
+    if (!quote) {
+      setStatus("Quote required");
+      return;
+    }
+    try {
+      setAdvisorBusy(true);
+      setAdvisor(null);
+      setAdvisorError("");
+      const response = await fetch("/api/ai-advice", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(buildAiAdvisorRequest(quote)),
+      });
+      const data = (await response.json()) as AiAdvisorResponse | AiAdvisorError;
+      if (!response.ok) {
+        const message =
+          "error" in data
+            ? data.setupHint
+              ? `${data.error} ${data.setupHint}`
+              : data.error
+            : "AI Advisor request failed";
+        throw new Error(message);
+      }
+      if (!isAiAdvisorResponse(data)) {
+        throw new Error("AI Advisor returned an invalid response");
+      }
+      setAdvisor(data);
+      setStatus("AI advisor ready");
+      log(`AI Advisor recommended ${AI_ROUTING_POLICIES[data.recommendedPolicy].label}`);
+    } catch (error) {
+      const message = errorMessage(error);
+      setAdvisorError(message);
+      setStatus(message);
+    } finally {
+      setAdvisorBusy(false);
+    }
+  }
+
+  function applyAdvisorPolicy() {
+    if (!advisor) {
+      return;
+    }
+    patchForm({ aiPolicy: advisor.recommendedPolicy });
+    setStatus("AI strategy applied; quote again");
+    log(`Applied AI strategy ${AI_ROUTING_POLICIES[advisor.recommendedPolicy].label}`);
   }
 
   async function copySignature() {
@@ -486,6 +541,74 @@ export default function App() {
                     </article>
                   ))}
                 </div>
+
+                <div className="llm-advisor">
+                  <div className="advisor-action-row">
+                    <div>
+                      <span>LLM Advisor</span>
+                      <strong>Second-pass AI review over the candidate routes</strong>
+                    </div>
+                    <button
+                      className="secondary-button"
+                      onClick={handleAskAiAdvisor}
+                      disabled={advisorBusy || !quote}
+                    >
+                      <Sparkles size={16} className={advisorBusy ? "spin" : ""} />
+                      Ask AI Advisor
+                    </button>
+                  </div>
+
+                  {advisorError ? <p className="advisor-error">{advisorError}</p> : null}
+
+                  {advisor ? (
+                    <div className="advisor-result">
+                      <div className="advisor-summary">
+                        <div>
+                          <span>Recommended strategy</span>
+                          <strong>{AI_ROUTING_POLICIES[advisor.recommendedPolicy].label}</strong>
+                        </div>
+                        <div>
+                          <span>Confidence</span>
+                          <strong>{Math.round(advisor.confidence * 100)}%</strong>
+                        </div>
+                      </div>
+                      <p>{advisor.thesis}</p>
+                      <div className="advisor-notes">
+                        {advisor.routeNotes.slice(0, 4).map((note) => (
+                          <article key={`${note.routeId}-${note.verdict}`}>
+                            <span>{note.verdict}</span>
+                            <strong>{routeNameForId(quote, note.routeId)}</strong>
+                            <p>{note.reason}</p>
+                          </article>
+                        ))}
+                      </div>
+                      {advisor.warnings.length > 0 ? (
+                        <div className="advisor-list">
+                          <span>Warnings</span>
+                          {advisor.warnings.map((item) => (
+                            <p key={item}>{item}</p>
+                          ))}
+                        </div>
+                      ) : null}
+                      {advisor.actionConstraints.length > 0 ? (
+                        <div className="advisor-list">
+                          <span>Before signing</span>
+                          {advisor.actionConstraints.map((item) => (
+                            <p key={item}>{item}</p>
+                          ))}
+                        </div>
+                      ) : null}
+                      <button
+                        className="secondary-button full-width"
+                        onClick={applyAdvisorPolicy}
+                        disabled={advisor.recommendedPolicy === form.aiPolicy}
+                      >
+                        <Sparkles size={16} />
+                        Use Suggested Strategy
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </section>
 
               <div className="alternatives">
@@ -642,6 +765,36 @@ function analysisMetrics(quote: SmartRouteQuote): Array<{ label: string; value: 
       value: `${best.risk.features.dexRiskBps ?? 0} bps`,
     },
   ];
+}
+
+function buildAiAdvisorRequest(quote: SmartRouteQuote) {
+  return {
+    userIntent: {
+      from: quote.tokenIn.symbol,
+      to: quote.tokenOut.symbol,
+      amount: formatTokenAmount(quote.tokenIn, quote.amountIn),
+      slippageBps: quote.slippageBps,
+      selectedPolicy: quote.aiPolicy.id,
+    },
+    selectedRouteId: quote.allocations[0]?.route.id ?? quote.alternatives[0]?.route.id ?? "",
+    routes: quote.alternatives.slice(0, 8).map((alternative) => ({
+      routeId: alternative.route.id,
+      route: describeDisplayRoute(quote, alternative.route),
+      expectedOut: `${formatTokenAmount(quote.tokenOut, alternative.amountOut, 8)} ${quote.tokenOut.symbol}`,
+      aiScore: `${formatTokenAmount(quote.tokenOut, alternative.netAmountOut, 8)} ${quote.tokenOut.symbol}`,
+      aiPenaltyBps: alternative.aiScore.penaltyBps,
+      rawRiskPenaltyBps: alternative.risk.penaltyBps,
+      hopCount: alternative.risk.features.hopCount ?? alternative.route.hops.length,
+      reserveImpactBps: alternative.risk.features.maxTradePressureBps ?? 0,
+      dexRiskBps: alternative.risk.features.dexRiskBps ?? 0,
+      reasons: alternative.aiScore.reasons,
+    })),
+  };
+}
+
+function routeNameForId(quote: SmartRouteQuote, routeId: string): string {
+  const alternative = quote.alternatives.find((item) => item.route.id === routeId);
+  return alternative ? describeDisplayRoute(quote, alternative.route) : routeId;
 }
 
 function formatBps(value: number | undefined): string {
