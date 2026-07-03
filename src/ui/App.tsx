@@ -70,7 +70,7 @@ export default function App() {
   const [quote, setQuote] = useState<SmartRouteQuote | null>(null);
   const [poolCount, setPoolCount] = useState(0);
   const [busy, setBusy] = useState<BusyState>("idle");
-  const [status, setStatus] = useState("Ready");
+  const [status, setStatus] = useState("就绪");
   const [signature, setSignature] = useState<string | null>(null);
   const [txHashes, setTxHashes] = useState<Hash[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
@@ -94,8 +94,8 @@ export default function App() {
       setBusy("connect");
       const connected = await connectInjectedWallet();
       setWallet(connected);
-      setStatus(connected.chainId === 1 ? "Wallet connected" : "Wrong network");
-      log(`Connected ${shortAddress(connected.address)}`);
+      setStatus(connected.chainId === 1 ? "钱包已连接" : "网络不正确");
+      log(`已连接 ${shortAddress(connected.address)}`);
     } catch (error) {
       setStatus(errorMessage(error));
     } finally {
@@ -112,8 +112,8 @@ export default function App() {
       await switchToMainnet(wallet.provider);
       const connected = await connectInjectedWallet();
       setWallet(connected);
-      setStatus("Mainnet active");
-      log("Switched to Ethereum mainnet");
+      setStatus("以太坊主网已连接");
+      log("已切换到以太坊主网");
     } catch (error) {
       setStatus(errorMessage(error));
     } finally {
@@ -125,7 +125,7 @@ export default function App() {
     try {
       validateForm(form);
       setBusy("quote");
-      setStatus("Loading pools");
+      setStatus("正在读取池子");
       setQuote(null);
       setAdvisor(null);
       setAdvisorError("");
@@ -148,8 +148,8 @@ export default function App() {
         aiPolicy: form.aiPolicy,
       });
       setQuote(nextQuote);
-      setStatus("Quote ready");
-      log(`Quoted ${nextQuote.allocations.length} allocation(s) from ${pools.length} pools`);
+      setStatus("报价已生成");
+      log(`已从 ${pools.length} 个池子生成 ${nextQuote.allocations.length} 个分配方案`);
     } catch (error) {
       setStatus(errorMessage(error));
     } finally {
@@ -159,7 +159,7 @@ export default function App() {
 
   async function handleSignQuote() {
     if (!wallet || !quote) {
-      setStatus("Wallet and quote required");
+      setStatus("请先连接钱包并生成报价");
       return;
     }
     try {
@@ -173,8 +173,8 @@ export default function App() {
         message: quoteMessage(quote, wallet.address),
       });
       setSignature(signed);
-      setStatus("Quote signed");
-      log("Quote signature captured");
+      setStatus("报价已签名");
+      log("已获得报价签名");
     } catch (error) {
       setStatus(errorMessage(error));
     } finally {
@@ -184,7 +184,7 @@ export default function App() {
 
   async function handleSwap() {
     if (!wallet || !quote) {
-      setStatus("Wallet and quote required");
+      setStatus("请先连接钱包并生成报价");
       return;
     }
     try {
@@ -218,7 +218,7 @@ export default function App() {
           hashes.push(...approvalHashes);
           setTxHashes([...hashes]);
         } else {
-          log("Native ETH input; approval skipped");
+          log("输入为原生 ETH，已跳过 ERC20 授权");
         }
 
         const swapHash = await sendSwapCall({
@@ -230,10 +230,10 @@ export default function App() {
         });
         hashes.push(swapHash);
         setTxHashes([...hashes]);
-        log(`Swap confirmed ${shortAddress(swapHash)}`);
+        log(`兑换已确认 ${shortAddress(swapHash)}`);
       }
 
-      setStatus("Swap confirmed");
+      setStatus("兑换已确认");
     } catch (error) {
       setStatus(errorMessage(error));
     } finally {
@@ -243,7 +243,7 @@ export default function App() {
 
   async function handleAskAiAdvisor() {
     if (!quote) {
-      setStatus("Quote required");
+      setStatus("请先生成报价");
       return;
     }
     try {
@@ -262,15 +262,15 @@ export default function App() {
             ? data.setupHint
               ? `${data.error} ${data.setupHint}`
               : data.error
-            : "AI Advisor request failed";
+            : "AI 顾问请求失败";
         throw new Error(message);
       }
       if (!isAiAdvisorResponse(data)) {
-        throw new Error("AI Advisor returned an invalid response");
+        throw new Error("AI 顾问返回格式无效");
       }
       setAdvisor(data);
-      setStatus("AI advisor ready");
-      log(`AI Advisor recommended ${AI_ROUTING_POLICIES[data.recommendedPolicy].label}`);
+      setStatus("AI 顾问已就绪");
+      log(`AI 顾问推荐：${AI_ROUTING_POLICIES[data.recommendedPolicy].label}`);
     } catch (error) {
       const message = errorMessage(error);
       setAdvisorError(message);
@@ -285,8 +285,8 @@ export default function App() {
       return;
     }
     patchForm({ aiPolicy: advisor.recommendedPolicy });
-    setStatus("AI strategy applied; quote again");
-    log(`Applied AI strategy ${AI_ROUTING_POLICIES[advisor.recommendedPolicy].label}`);
+    setStatus("已应用 AI 策略，请重新报价");
+    log(`已应用 AI 策略：${AI_ROUTING_POLICIES[advisor.recommendedPolicy].label}`);
   }
 
   async function copySignature() {
@@ -294,15 +294,15 @@ export default function App() {
       return;
     }
     await navigator.clipboard.writeText(signature);
-    log("Signature copied");
+    log("签名已复制");
   }
 
   return (
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Ethereum Mainnet</p>
-          <h1>AI On-chain Router</h1>
+          <p className="eyebrow">以太坊主网</p>
+          <h1>AI 链上订单路由</h1>
         </div>
         <div className="wallet-stack">
           {wallet ? (
@@ -310,19 +310,19 @@ export default function App() {
               <Wallet size={16} />
               <span>{shortAddress(wallet.address)}</span>
               <span className={wallet.chainId === 1 ? "chain-ok" : "chain-bad"}>
-                {wallet.chainId === 1 ? "Mainnet" : `Chain ${wallet.chainId}`}
+                {wallet.chainId === 1 ? "主网" : `链 ID ${wallet.chainId}`}
               </span>
             </div>
           ) : null}
           {wallet && wallet.chainId !== 1 ? (
             <button className="secondary-button" onClick={handleSwitchNetwork} disabled={isBusy}>
               <RefreshCw size={16} />
-              Switch
+              切换网络
             </button>
           ) : (
             <button className="primary-button" onClick={handleConnect} disabled={isBusy}>
               <Wallet size={16} />
-              {wallet ? "Reconnect" : "Connect"}
+              {wallet ? "重新连接" : "连接钱包"}
             </button>
           )}
         </div>
@@ -330,25 +330,25 @@ export default function App() {
 
       <section className="status-row">
         <div className="status-pill">
-          {status === "Ready" || status.includes("ready") || status.includes("connected") ? (
+          {isPositiveStatus(status) ? (
             <CheckCircle2 size={16} />
           ) : (
             <AlertTriangle size={16} />
           )}
           <span>{status}</span>
         </div>
-        <span>{poolCount > 0 ? `${poolCount} pools loaded` : "No pools loaded"}</span>
+        <span>{poolCount > 0 ? `已加载 ${poolCount} 个池子` : "尚未加载池子"}</span>
       </section>
 
       <section className="workspace-grid">
         <form className="panel order-panel" onSubmit={(event) => event.preventDefault()}>
           <div className="panel-heading">
             <Route size={18} />
-            <h2>Order</h2>
+            <h2>订单</h2>
           </div>
 
           <label>
-            <span>From</span>
+            <span>卖出</span>
             <select
               value={form.fromSymbol}
               onChange={(event) => patchForm({ fromSymbol: event.target.value })}
@@ -362,7 +362,7 @@ export default function App() {
           </label>
 
           <label>
-            <span>To</span>
+            <span>买入</span>
             <select
               value={form.toSymbol}
               onChange={(event) => patchForm({ toSymbol: event.target.value })}
@@ -376,7 +376,7 @@ export default function App() {
           </label>
 
           <label>
-            <span>Amount</span>
+            <span>数量</span>
             <input
               value={form.amount}
               inputMode="decimal"
@@ -386,7 +386,7 @@ export default function App() {
 
           <div className="field-row">
             <label>
-              <span>Slippage bps</span>
+              <span>滑点基点</span>
               <input
                 value={form.slippageBps}
                 inputMode="numeric"
@@ -394,7 +394,7 @@ export default function App() {
               />
             </label>
             <label>
-              <span>Splits</span>
+              <span>拆单数</span>
               <input
                 value={form.maxSplits}
                 inputMode="numeric"
@@ -404,7 +404,7 @@ export default function App() {
           </div>
 
           <label>
-            <span>Max hops</span>
+            <span>最大跳数</span>
             <select value={form.maxHops} onChange={(event) => patchForm({ maxHops: event.target.value })}>
               <option value="1">1</option>
               <option value="2">2</option>
@@ -412,7 +412,7 @@ export default function App() {
           </label>
 
           <label>
-            <span>AI Strategy</span>
+            <span>AI 策略</span>
             <select
               value={form.aiPolicy}
               onChange={(event) =>
@@ -434,39 +434,39 @@ export default function App() {
 
           <button className="primary-button full-width" onClick={handleQuote} disabled={isBusy}>
             <RefreshCw size={16} className={busy === "quote" ? "spin" : ""} />
-            Quote
+            获取报价
           </button>
         </form>
 
         <section className="panel route-panel">
           <div className="panel-heading">
             <ShieldCheck size={18} />
-            <h2>Route</h2>
+            <h2>路线</h2>
           </div>
 
           {quote ? (
             <>
               <div className="quote-summary">
                 <div>
-                  <span>Input</span>
+                  <span>输入</span>
                   <strong>
                     {formatTokenAmount(quote.tokenIn, quote.amountIn)} {quote.tokenIn.symbol}
                   </strong>
                 </div>
                 <div>
-                  <span>Output</span>
+                  <span>输出</span>
                   <strong>
                     {formatTokenAmount(quote.tokenOut, quote.amountOut)} {quote.tokenOut.symbol}
                   </strong>
                 </div>
                 <div>
-                  <span>Min</span>
+                  <span>最低到账</span>
                   <strong>
                     {formatTokenAmount(quote.tokenOut, quote.minAmountOut)} {quote.tokenOut.symbol}
                   </strong>
                 </div>
                 <div>
-                  <span>Block</span>
+                  <span>区块</span>
                   <strong>{quote.blockNumber?.toString() ?? "-"}</strong>
                 </div>
               </div>
@@ -492,14 +492,14 @@ export default function App() {
               <section className="ai-analysis">
                 <div className="analysis-heading">
                   <div>
-                    <span>AI Analysis</span>
+                    <span>AI 分析</span>
                     <h3>{buildDecisionSummary(quote)}</h3>
                   </div>
                   <Sparkles size={18} />
                 </div>
 
                 <p className="analysis-formula">
-                  {quote.aiPolicy.label}: AI score = expected output x (10000 - AI penalty bps) / 10000
+                  {quote.aiPolicy.label}：AI 分数 = 预期输出 x (10000 - AI 惩罚基点) / 10000
                 </p>
                 <p className="analysis-policy-copy">{quote.aiPolicy.description}</p>
 
@@ -522,19 +522,19 @@ export default function App() {
                       <div className="rank-body">
                         <div className="rank-title">
                           <strong>{describeDisplayRoute(quote, alternative.route)}</strong>
-                          <span>{index === 0 ? "Selected" : "Candidate"}</span>
+                          <span>{index === 0 ? "已选择" : "候选"}</span>
                         </div>
                         <div className="rank-grid">
                           <span>
-                            expected {formatTokenAmount(quote.tokenOut, alternative.amountOut)}{" "}
+                            预期输出 {formatTokenAmount(quote.tokenOut, alternative.amountOut)}{" "}
                             {quote.tokenOut.symbol}
                           </span>
                           <span>
-                            AI score {formatTokenAmount(quote.tokenOut, alternative.netAmountOut)}{" "}
+                            AI 分数 {formatTokenAmount(quote.tokenOut, alternative.netAmountOut)}{" "}
                             {quote.tokenOut.symbol}
                           </span>
-                          <span>AI penalty {alternative.aiScore.penaltyBps} bps</span>
-                          <span>impact {formatBps(alternative.risk.features.maxTradePressureBps)}</span>
+                          <span>AI 惩罚 {alternative.aiScore.penaltyBps} 基点</span>
+                          <span>池子冲击 {formatBps(alternative.risk.features.maxTradePressureBps)}</span>
                         </div>
                         <p>{alternative.aiScore.reasons.join("; ")}</p>
                       </div>
@@ -545,8 +545,8 @@ export default function App() {
                 <div className="llm-advisor">
                   <div className="advisor-action-row">
                     <div>
-                      <span>LLM Advisor</span>
-                      <strong>Cloudflare Workers AI review over the candidate routes</strong>
+                      <span>大模型顾问</span>
+                      <strong>Cloudflare Workers AI 正在复核候选路线</strong>
                     </div>
                     <button
                       className="secondary-button"
@@ -554,7 +554,7 @@ export default function App() {
                       disabled={advisorBusy || !quote}
                     >
                       <Sparkles size={16} className={advisorBusy ? "spin" : ""} />
-                      Ask AI Advisor
+                      询问 AI 顾问
                     </button>
                   </div>
 
@@ -564,11 +564,11 @@ export default function App() {
                     <div className="advisor-result">
                       <div className="advisor-summary">
                         <div>
-                          <span>Recommended strategy</span>
+                          <span>推荐策略</span>
                           <strong>{AI_ROUTING_POLICIES[advisor.recommendedPolicy].label}</strong>
                         </div>
                         <div>
-                          <span>Confidence</span>
+                          <span>信心</span>
                           <strong>{Math.round(advisor.confidence * 100)}%</strong>
                         </div>
                       </div>
@@ -576,7 +576,7 @@ export default function App() {
                       <div className="advisor-notes">
                         {advisor.routeNotes.slice(0, 4).map((note) => (
                           <article key={`${note.routeId}-${note.verdict}`}>
-                            <span>{note.verdict}</span>
+                            <span>{formatAdvisorVerdict(note.verdict)}</span>
                             <strong>{routeNameForId(quote, note.routeId)}</strong>
                             <p>{note.reason}</p>
                           </article>
@@ -584,7 +584,7 @@ export default function App() {
                       </div>
                       {advisor.warnings.length > 0 ? (
                         <div className="advisor-list">
-                          <span>Warnings</span>
+                          <span>风险提示</span>
                           {advisor.warnings.map((item) => (
                             <p key={item}>{item}</p>
                           ))}
@@ -592,7 +592,7 @@ export default function App() {
                       ) : null}
                       {advisor.actionConstraints.length > 0 ? (
                         <div className="advisor-list">
-                          <span>Before signing</span>
+                          <span>签名前检查</span>
                           {advisor.actionConstraints.map((item) => (
                             <p key={item}>{item}</p>
                           ))}
@@ -604,7 +604,7 @@ export default function App() {
                         disabled={advisor.recommendedPolicy === form.aiPolicy}
                       >
                         <Sparkles size={16} />
-                        Use Suggested Strategy
+                        使用推荐策略
                       </button>
                     </div>
                   ) : null}
@@ -612,7 +612,7 @@ export default function App() {
               </section>
 
               <div className="alternatives">
-                <h3>Alternatives</h3>
+                <h3>候选路线</h3>
                 {quote.alternatives.slice(0, 5).map((alternative) => (
                   <div className="alternative-row" key={alternative.route.id}>
                     <span>{describeDisplayRoute(quote, alternative.route)}</span>
@@ -624,7 +624,7 @@ export default function App() {
           ) : (
             <div className="empty-state">
               <Route size={30} />
-              <span>No quote</span>
+              <span>还没有报价</span>
             </div>
           )}
         </section>
@@ -632,25 +632,25 @@ export default function App() {
         <section className="panel execution-panel">
           <div className="panel-heading">
             <Send size={18} />
-            <h2>Execution</h2>
+            <h2>执行</h2>
           </div>
 
           <button className="secondary-button full-width" onClick={handleSignQuote} disabled={isBusy || !wallet || !quote}>
             <ShieldCheck size={16} />
-            Sign Quote
+            签名报价
           </button>
           <button className="danger-button full-width" onClick={handleSwap} disabled={isBusy || !wallet || !quote}>
             <Play size={16} />
-            {quote && isNativeToken(quote.tokenIn) ? "Swap" : "Approve & Swap"}
+            {quote && isNativeToken(quote.tokenIn) ? "兑换" : "授权并兑换"}
           </button>
 
           {signature ? (
             <div className="signature-box">
               <div>
-                <span>Signature</span>
+                <span>签名</span>
                 <strong>{signature.slice(0, 18)}...{signature.slice(-10)}</strong>
               </div>
-              <button className="icon-button" onClick={copySignature} aria-label="Copy signature">
+              <button className="icon-button" onClick={copySignature} aria-label="复制签名">
                 <Copy size={16} />
               </button>
             </div>
@@ -666,7 +666,7 @@ export default function App() {
           </div>
 
           <div className="log-box">
-            {logs.length > 0 ? logs.map((item) => <span key={item}>{item}</span>) : <span>No activity</span>}
+            {logs.length > 0 ? logs.map((item) => <span key={item}>{item}</span>) : <span>暂无活动</span>}
           </div>
         </section>
       </section>
@@ -676,31 +676,31 @@ export default function App() {
 
 function validateForm(form: FormState): void {
   if (form.fromSymbol === form.toSymbol) {
-    throw new Error("Choose two different tokens");
+    throw new Error("请选择两个不同的代币");
   }
   if (!Number.isFinite(Number(form.amount)) || Number(form.amount) <= 0) {
-    throw new Error("Amount must be positive");
+    throw new Error("数量必须大于 0");
   }
   if (!Number.isInteger(Number(form.slippageBps)) || Number(form.slippageBps) < 1) {
-    throw new Error("Slippage bps must be positive");
+    throw new Error("滑点基点必须大于 0");
   }
   if (!Number.isInteger(Number(form.maxSplits)) || Number(form.maxSplits) < 1) {
-    throw new Error("Splits must be positive");
+    throw new Error("拆单数必须大于 0");
   }
   if (!form.rpcUrl.trim().startsWith("http")) {
-    throw new Error("RPC must be an HTTP URL");
+    throw new Error("RPC 必须是 HTTP URL");
   }
 }
 
 function quoteMessage(quote: SmartRouteQuote, walletAddress: string): string {
   return [
-    "AI On-chain Router Quote",
-    `Wallet: ${walletAddress}`,
-    `Input: ${formatTokenAmount(quote.tokenIn, quote.amountIn)} ${quote.tokenIn.symbol}`,
-    `Output: ${formatTokenAmount(quote.tokenOut, quote.amountOut)} ${quote.tokenOut.symbol}`,
-    `Min Output: ${formatTokenAmount(quote.tokenOut, quote.minAmountOut)} ${quote.tokenOut.symbol}`,
-    `Block: ${quote.blockNumber?.toString() ?? "unknown"}`,
-    `Generated: ${quote.generatedAt}`,
+    "AI 链上订单路由报价",
+    `钱包：${walletAddress}`,
+    `输入：${formatTokenAmount(quote.tokenIn, quote.amountIn)} ${quote.tokenIn.symbol}`,
+    `输出：${formatTokenAmount(quote.tokenOut, quote.amountOut)} ${quote.tokenOut.symbol}`,
+    `最低到账：${formatTokenAmount(quote.tokenOut, quote.minAmountOut)} ${quote.tokenOut.symbol}`,
+    `区块：${quote.blockNumber?.toString() ?? "未知"}`,
+    `生成时间：${quote.generatedAt}`,
   ].join("\n");
 }
 
@@ -714,24 +714,24 @@ function describeDisplayRoute(
     quote.tokenOut.symbol,
   ];
   const dexes = route.hops.map((hop) => hop.pool.dex.name).join(" + ");
-  return `${labels.join(" -> ")} via ${dexes}`;
+  return `${labels.join(" → ")} 通过 ${dexes}`;
 }
 
 function buildDecisionSummary(quote: SmartRouteQuote): string {
   const best = quote.alternatives[0];
   if (!best) {
-    return "No route scored yet";
+    return "还没有路线评分";
   }
   const second = quote.alternatives[1];
   const routeName = describeDisplayRoute(quote, best.route);
   if (!second) {
-    return `Selected ${routeName} because it is the only executable route with positive output.`;
+    return `已选择 ${routeName}，因为这是唯一输出为正且可执行的路线。`;
   }
   const edge = best.netAmountOut > second.netAmountOut ? best.netAmountOut - second.netAmountOut : 0n;
-  return `Selected ${routeName}; ${quote.aiPolicy.label} AI score leads the next route by ${formatTokenAmount(
+  return `已选择 ${routeName}；在${quote.aiPolicy.label}下，AI 分数比下一条路线高 ${formatTokenAmount(
     quote.tokenOut,
     edge,
-  )} ${quote.tokenOut.symbol}.`;
+  )} ${quote.tokenOut.symbol}。`;
 }
 
 function analysisMetrics(quote: SmartRouteQuote): Array<{ label: string; value: string }> {
@@ -741,28 +741,28 @@ function analysisMetrics(quote: SmartRouteQuote): Array<{ label: string; value: 
   }
   return [
     {
-      label: "Expected",
+      label: "预期输出",
       value: `${formatTokenAmount(quote.tokenOut, best.amountOut)} ${quote.tokenOut.symbol}`,
     },
     {
-      label: "Risk-adjusted",
+      label: "风险调整后",
       value: `${formatTokenAmount(quote.tokenOut, best.netAmountOut)} ${quote.tokenOut.symbol}`,
     },
     {
-      label: "AI penalty",
-      value: `${best.aiScore.penaltyBps} bps`,
+      label: "AI 惩罚",
+      value: `${best.aiScore.penaltyBps} 基点`,
     },
     {
-      label: "Hops",
+      label: "跳数",
       value: String(best.risk.features.hopCount ?? best.route.hops.length),
     },
     {
-      label: "Reserve impact",
+      label: "储备冲击",
       value: formatBps(best.risk.features.maxTradePressureBps),
     },
     {
-      label: "DEX risk",
-      value: `${best.risk.features.dexRiskBps ?? 0} bps`,
+      label: "DEX 风险",
+      value: `${best.risk.features.dexRiskBps ?? 0} 基点`,
     },
   ];
 }
@@ -802,6 +802,20 @@ function formatBps(value: number | undefined): string {
     return "0.00%";
   }
   return `${(value / 100).toFixed(2)}%`;
+}
+
+function formatAdvisorVerdict(verdict: AiAdvisorResponse["routeNotes"][number]["verdict"]): string {
+  if (verdict === "prefer") {
+    return "优先";
+  }
+  if (verdict === "acceptable") {
+    return "可接受";
+  }
+  return "避开";
+}
+
+function isPositiveStatus(status: string): boolean {
+  return /就绪|已连接|已生成|已签名|已确认|已应用/.test(status);
 }
 
 function errorMessage(error: unknown): string {

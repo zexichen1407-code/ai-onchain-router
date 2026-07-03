@@ -26,7 +26,7 @@ const server = createServer(async (req, res) => {
     }
     vite.middlewares(req, res, () => {
       res.statusCode = 404;
-      res.end("Not found");
+      res.end("未找到");
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -35,7 +35,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`AI router app running at http://${host}:${port}`);
+  console.log(`AI 链上订单路由已启动：http://${host}:${port}`);
 });
 
 async function handleAiAdvice(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -48,8 +48,8 @@ async function handleAiAdvice(req: IncomingMessage, res: ServerResponse): Promis
     accountId === "your-cloudflare-account-id"
   ) {
     writeJson(res, 501, {
-      error: "AI Advisor is not configured.",
-      setupHint: "Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in .env, then restart npm run dev.",
+      error: "AI 顾问还没有配置。",
+      setupHint: "请在 .env 里设置 CLOUDFLARE_ACCOUNT_ID 和 CLOUDFLARE_API_TOKEN，然后重启 npm run dev。",
     });
     return;
   }
@@ -59,15 +59,15 @@ async function handleAiAdvice(req: IncomingMessage, res: ServerResponse): Promis
 
   const parsed = await askCloudflareAdvisor(accountId, apiToken, request);
   if (!isAiAdvisorResponse(parsed)) {
-    throw new Error("AI Advisor returned an invalid response shape");
+    throw new Error("AI 顾问返回格式无效");
   }
 
   const routeIds = new Set(request.routes.map((route) => route.routeId));
   if (!routeIds.has(parsed.recommendedRouteId)) {
-    throw new Error("AI Advisor recommended a route outside the candidate set");
+    throw new Error("AI 顾问推荐了候选集之外的路线");
   }
   if (!isPolicy(parsed.recommendedPolicy)) {
-    throw new Error("AI Advisor recommended an invalid policy");
+    throw new Error("AI 顾问推荐了无效策略");
   }
 
   writeJson(res, 200, parsed);
@@ -80,27 +80,28 @@ async function askCloudflareAdvisor(
 ): Promise<unknown> {
   const model = process.env.CLOUDFLARE_AI_MODEL ?? "@cf/meta/llama-3.1-8b-instruct-fast";
   const prompt = JSON.stringify({
-    task: "Choose a routing policy and route from the candidates. Explain tradeoffs.",
+    task: "从候选路线里选择一个路由策略和一条路线，并用中文解释权衡。",
     rules: [
-      "Only evaluate candidate routes supplied by the app.",
-      "Never ask for private keys, seed phrases, signatures, or wallet permissions.",
-      "Do not create calldata or new routes.",
-      "Return strict JSON only.",
+      "只能评估应用提供的候选路线。",
+      "不要索要私钥、助记词、签名或钱包权限。",
+      "不要创建新的 calldata 或新的路线。",
+      "只返回严格 JSON，不要返回 markdown。",
+      "thesis、routeNotes.reason、warnings、actionConstraints 必须使用简体中文。",
     ],
     schema: {
       recommendedPolicy: "max-output | balanced | conservative",
-      recommendedRouteId: "one of the supplied routeId values",
-      confidence: "number from 0 to 1",
-      thesis: "short explanation",
+      recommendedRouteId: "必须是输入里的某个 routeId",
+      confidence: "0 到 1 之间的数字",
+      thesis: "中文短解释",
       routeNotes: [
         {
-          routeId: "candidate routeId",
+          routeId: "候选 routeId",
           verdict: "prefer | acceptable | avoid",
-          reason: "one sentence",
+          reason: "一句中文理由",
         },
       ],
-      warnings: ["execution, slippage, MEV, or liquidity warnings"],
-      actionConstraints: ["things user must verify before signing"],
+      warnings: ["中文风险提示，例如执行、滑点、MEV 或流动性风险"],
+      actionConstraints: ["用户签名前必须确认的中文检查项"],
     },
     request,
   });
@@ -119,7 +120,7 @@ async function askCloudflareAdvisor(
           {
             role: "system",
             content:
-              "You are an on-chain DEX smart order routing advisor. Return valid JSON only. Never output markdown.",
+              "你是链上 DEX 智能订单路由顾问。只返回有效 JSON，不要输出 markdown。所有面向用户的解释必须使用简体中文。",
           },
           {
             role: "user",
@@ -142,17 +143,17 @@ async function askCloudflareAdvisor(
   }
   const text = "choices" in payload ? payload.choices?.[0]?.message?.content : undefined;
   if (!text) {
-    throw new Error("Cloudflare Advisor returned no text");
+    throw new Error("Cloudflare AI 没有返回文本");
   }
   return parseAdvisorJson(text);
 }
 
 function validateAdvisorRequest(request: AiAdvisorRequest): void {
   if (!request.routes?.length) {
-    throw new Error("AI Advisor needs at least one route");
+    throw new Error("AI 顾问至少需要一条候选路线");
   }
   if (!request.routes.some((route) => route.routeId === request.selectedRouteId)) {
-    throw new Error("Selected route is missing from candidate routes");
+    throw new Error("已选路线不在候选路线里");
   }
 }
 
@@ -163,7 +164,7 @@ function parseAdvisorJson(text: string): unknown {
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     if (start < 0 || end <= start) {
-      throw new Error("AI Advisor did not return JSON");
+      throw new Error("AI 顾问没有返回 JSON");
     }
     return JSON.parse(text.slice(start, end + 1));
   }
@@ -221,12 +222,12 @@ interface CloudflareErrorResponse {
 
 function cloudflareErrorMessage(payload: CloudflareChatCompletionResponse | CloudflareErrorResponse): string {
   if ("error" in payload && payload.error?.message) {
-    return `Cloudflare Advisor failed: ${payload.error.message}`;
+    return `Cloudflare AI 调用失败：${payload.error.message}`;
   }
   if ("errors" in payload && payload.errors?.[0]?.message) {
-    return `Cloudflare Advisor failed: ${payload.errors[0].message}`;
+    return `Cloudflare AI 调用失败：${payload.errors[0].message}`;
   }
-  return "Cloudflare Advisor failed";
+  return "Cloudflare AI 调用失败";
 }
 
 async function readBody(req: IncomingMessage): Promise<string> {
@@ -235,7 +236,7 @@ async function readBody(req: IncomingMessage): Promise<string> {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
     const size = chunks.reduce((sum, item) => sum + item.length, 0);
     if (size > 128_000) {
-      throw new Error("Request body too large");
+      throw new Error("请求体过大");
     }
   }
   return Buffer.concat(chunks).toString("utf8");

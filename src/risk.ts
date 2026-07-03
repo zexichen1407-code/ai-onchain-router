@@ -23,16 +23,16 @@ export function scoreRoute(route: CandidateRoute, amountIn: bigint): RiskScore {
   const penaltyBps = Math.min(2_500, hopPenaltyBps + dexRiskBps + liquidityPenaltyBps);
 
   if (hopCount > 1) {
-    reasons.push(`${hopCount} hops add execution complexity`);
+    reasons.push(`${hopCount} 跳路线会增加执行复杂度`);
   }
   if (maxTradePressureBps > 300) {
-    reasons.push(`largest hop consumes ${(maxTradePressureBps / 100).toFixed(2)}% of visible reserves`);
+    reasons.push(`最大一跳消耗可见储备的 ${(maxTradePressureBps / 100).toFixed(2)}%`);
   }
   if (dexRiskBps > 0) {
-    reasons.push(`DEX venue risk adds ${dexRiskBps} bps`);
+    reasons.push(`DEX 场所风险增加 ${dexRiskBps} 基点`);
   }
   if (reasons.length === 0) {
-    reasons.push("low visible reserve impact and simple execution path");
+    reasons.push("可见储备冲击低，执行路径简单");
   }
 
   return {

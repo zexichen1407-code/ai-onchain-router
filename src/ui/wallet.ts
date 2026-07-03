@@ -54,7 +54,7 @@ declare global {
 export function getInjectedProvider(): EthereumProvider {
   const provider = window.ethereum;
   if (!provider) {
-    throw new Error("No injected wallet found");
+    throw new Error("没有检测到浏览器钱包");
   }
   return provider;
 }
@@ -63,7 +63,7 @@ export async function connectInjectedWallet(): Promise<WalletConnection> {
   const provider = getInjectedProvider();
   const accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
   if (!accounts[0]) {
-    throw new Error("Wallet returned no account");
+    throw new Error("钱包没有返回账户");
   }
   const chainIdHex = (await provider.request({ method: "eth_chainId" })) as string;
   return {
@@ -149,12 +149,12 @@ export async function approveIfNeeded(params: {
   });
 
   if (allowance >= params.amount) {
-    params.onLog(`Allowance ok for ${params.token.symbol}`);
+    params.onLog(`${params.token.symbol} 授权额度足够`);
     return hashes;
   }
 
   if (allowance > 0n) {
-    params.onLog(`Resetting ${params.token.symbol} allowance`);
+    params.onLog(`正在重置 ${params.token.symbol} 授权额度`);
     const resetHash = await walletClient.writeContract({
       address: params.token.address,
       abi: ERC20_ABI,
@@ -167,7 +167,7 @@ export async function approveIfNeeded(params: {
     await publicClient.waitForTransactionReceipt({ hash: resetHash });
   }
 
-  params.onLog(`Approving ${params.token.symbol}`);
+  params.onLog(`正在授权 ${params.token.symbol}`);
   const approveHash = await walletClient.writeContract({
     address: params.token.address,
     abi: ERC20_ABI,
@@ -190,7 +190,7 @@ export async function sendSwapCall(params: {
 }): Promise<Hash> {
   const publicClient = makePublicClient(params.rpcUrl);
   const walletClient = makeWalletClient(params.provider, params.owner);
-  params.onLog(`Sending swap ${shortHash(params.call.routeId)}`);
+  params.onLog(`正在发送兑换交易 ${shortHash(params.call.routeId)}`);
   const hash = await walletClient.sendTransaction({
     account: params.owner,
     chain: mainnet,

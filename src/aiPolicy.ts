@@ -9,20 +9,20 @@ import type {
 export const AI_ROUTING_POLICIES: Record<AiRoutingPolicyId, AiRoutingPolicy> = {
   "max-output": {
     id: "max-output",
-    label: "Max Output",
-    description: "Route selection optimizes expected output and ignores risk penalties.",
+    label: "最大输出",
+    description: "路线选择优先最大化预期输出，忽略风险惩罚。",
     riskMultiplierBps: 0,
   },
   balanced: {
     id: "balanced",
-    label: "Balanced",
-    description: "Route selection balances expected output with venue, liquidity, and hop risk.",
+    label: "平衡策略",
+    description: "路线选择会同时权衡预期输出、交易场所、流动性和跳数风险。",
     riskMultiplierBps: 10_000,
   },
   conservative: {
     id: "conservative",
-    label: "Conservative",
-    description: "Route selection heavily penalizes visible reserve impact and execution complexity.",
+    label: "保守策略",
+    description: "路线选择会更重地惩罚可见储备冲击和执行复杂度。",
     riskMultiplierBps: 22_000,
   },
 };
@@ -63,20 +63,20 @@ function buildPolicyReasons(params: {
   route: CandidateRoute;
 }): string[] {
   if (params.policy.id === "max-output") {
-    return ["AI policy ignores risk penalties and selects the highest expected output."];
+    return ["AI 策略忽略风险惩罚，选择预期输出最高的路线。"];
   }
 
   const reasons = [
-    `AI policy applies ${params.penaltyBps} bps total penalty under ${params.policy.label}.`,
+    `AI 在${params.policy.label}下应用 ${params.penaltyBps} 基点总惩罚。`,
   ];
   if ((params.risk.features.hopCount ?? params.route.hops.length) > 1) {
-    reasons.push("Multi-hop execution is penalized.");
+    reasons.push("多跳执行会被额外惩罚。");
   }
   if ((params.risk.features.maxTradePressureBps ?? 0) > 0) {
-    reasons.push("Visible reserve impact is included in route utility.");
+    reasons.push("可见储备冲击已计入路线效用。");
   }
   if ((params.risk.features.dexRiskBps ?? 0) > 0) {
-    reasons.push("Venue risk is included in route utility.");
+    reasons.push("交易场所风险已计入路线效用。");
   }
   return reasons;
 }
