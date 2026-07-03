@@ -1,7 +1,6 @@
 import "dotenv/config";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createServer as createViteServer } from "vite";
-import OpenAI from "openai";
 import type { AiAdvisorRequest } from "./aiAdvisor.js";
 import { isAiAdvisorResponse, isPolicy } from "./aiAdvisor.js";
 
@@ -34,11 +33,11 @@ server.listen(port, host, () => {
 });
 
 async function handleAiAdvice(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || apiKey.startsWith("sk-your-key")) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === "your-gemini-key") {
     writeJson(res, 501, {
       error: "AI Advisor is not configured.",
-      setupHint: "Set OPENAI_API_KEY in .env and restart npm run dev.",
+      setupHint: "Set GEMINI_API_KEY in .env and restart npm run dev.",
     });
     return;
   }
@@ -46,39 +45,7 @@ async function handleAiAdvice(req: IncomingMessage, res: ServerResponse): Promis
   const request = JSON.parse(await readBody(req)) as AiAdvisorRequest;
   validateAdvisorRequest(request);
 
-  const client = new OpenAI({ apiKey });
-  const response = await client.responses.create({
-    model: process.env.OPENAI_MODEL ?? "gpt-5.5",
-    instructions: [
-      "You are an on-chain DEX smart order routing advisor.",
-      "You only evaluate candidate routes supplied by the app.",
-      "You never ask for private keys, seed phrases, signatures, or wallet permissions.",
-      "You cannot create new calldata or new routes.",
-      "Return strict JSON only. No markdown.",
-    ].join("\n"),
-    input: JSON.stringify({
-      task: "Choose a routing policy and route from the candidates. Explain tradeoffs.",
-      schema: {
-        recommendedPolicy: "max-output | balanced | conservative",
-        recommendedRouteId: "one of the supplied routeId values",
-        confidence: "number from 0 to 1",
-        thesis: "short explanation",
-        routeNotes: [
-          {
-            routeId: "candidate routeId",
-            verdict: "prefer | acceptable | avoid",
-            reason: "one sentence",
-          },
-        ],
-        warnings: ["execution, slippage, MEV, or liquidity warnings"],
-        actionConstraints: ["things user must verify before signing"],
-      },
-      request,
-    }),
-    store: false,
-  });
-
-  const parsed = parseAdvisorJson(response.output_text);
+  const parsed = await askGeminiAdvisor(apiKey, request);
   if (!isAiAdvisorResponse(parsed)) {
     throw new Error("AI Advisor returned an invalid response shape");
   }
@@ -92,6 +59,71 @@ async function handleAiAdvice(req: IncomingMessage, res: ServerResponse): Promis
   }
 
   writeJson(res, 200, parsed);
+}
+
+async function askGeminiAdvisor(apiKey: string, request: AiAdvisorRequest): Promise<unknown> {
+  const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    model,
+  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const prompt = JSON.stringify({
+    task: "Choose a routing policy and route from the candidates. Explain tradeoffs.",
+    rules: [
+      "Only evaluate candidate routes supplied by the app.",
+      "Never ask for private keys, seed phrases, signatures, or wallet permissions.",
+      "Do not create calldata or new routes.",
+      "Return strict JSON only.",
+    ],
+    schema: {
+      recommendedPolicy: "max-output | balanced | conservative",
+      recommendedRouteId: "one of the supplied routeId values",
+      confidence: "number from 0 to 1",
+      thesis: "short explanation",
+      routeNotes: [
+        {
+          routeId: "candidate routeId",
+          verdict: "prefer | acceptable | avoid",
+          reason: "one sentence",
+        },
+      ],
+      warnings: ["execution, slippage, MEV, or liquidity warnings"],
+      actionConstraints: ["things user must verify before signing"],
+    },
+    request,
+  });
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [
+          {
+            text: "You are an on-chain DEX smart order routing advisor. Return valid JSON only.",
+          },
+        ],
+      },
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+      },
+    }),
+  });
+
+  const payload = (await response.json()) as GeminiGenerateContentResponse | GeminiErrorResponse;
+  if (!response.ok) {
+    throw new Error(geminiErrorMessage(payload));
+  }
+  const text = "candidates" in payload ? payload.candidates?.[0]?.content?.parts?.[0]?.text : undefined;
+  if (!text) {
+    throw new Error("Gemini Advisor returned no text");
+  }
+  return parseAdvisorJson(text);
 }
 
 function validateAdvisorRequest(request: AiAdvisorRequest): void {
@@ -114,6 +146,27 @@ function parseAdvisorJson(text: string): unknown {
     }
     return JSON.parse(text.slice(start, end + 1));
   }
+}
+
+interface GeminiGenerateContentResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+  }>;
+}
+
+interface GeminiErrorResponse {
+  error?: {
+    message?: string;
+  };
+}
+
+function geminiErrorMessage(payload: GeminiGenerateContentResponse | GeminiErrorResponse): string {
+  if ("error" in payload && payload.error?.message) {
+    return `Gemini Advisor failed: ${payload.error.message}`;
+  }
+  return "Gemini Advisor failed";
 }
 
 async function readBody(req: IncomingMessage): Promise<string> {

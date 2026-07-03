@@ -21,7 +21,7 @@ cd C:\Users\zexi\ai-onchain-router
 npm run dev
 ```
 
-如果要启用真正的 LLM 二次分析，复制 `.env.example` 为 `.env`，填入 `OPENAI_API_KEY`，然后重启 `npm run dev`。不配置 key 时，页面仍可正常 quote 和 swap，但 `Ask AI Advisor` 会显示配置提示。
+如果要启用真正的 LLM 二次分析，复制 `.env.example` 为 `.env`，填入 `GEMINI_API_KEY`，然后重启 `npm run dev`。不配置 key 时，页面仍可正常 quote 和 swap，但 `Ask AI Advisor` 会显示配置提示。
 
 打开 Vite 给出的本地地址。页面支持：
 
@@ -31,7 +31,7 @@ npm run dev
 - 支持 native ETH 输入，例如 `ETH -> USDC`，执行时调用 `swapExactETHForTokens` 并跳过 ERC20 approval。
 - 展示 `AI Analysis`：评分公式、候选路线排名、risk-adjusted score、流动性冲击和 route 选择理由。
 - `AI Strategy` 会参与真实路由决策：`Max Output` 追求最大输出，`Balanced` 平衡输出和风险，`Conservative` 更重地惩罚高风险路径。
-- `Ask AI Advisor` 会把候选 route 发给本地 server，由 OpenAI Responses API 做二次推理，返回推荐策略、推荐 route、信心和风险提示。
+- `Ask AI Advisor` 会把候选 route 发给本地 server，由 Gemini API 做二次推理，返回推荐策略、推荐 route、信心和风险提示。
 - 签名当前 quote。
 - 依次发起 ERC20 approval 和 swap 交易，由钱包逐笔确认。
 
