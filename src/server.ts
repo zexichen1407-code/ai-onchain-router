@@ -33,11 +33,11 @@ server.listen(port, host, () => {
 });
 
 async function handleAiAdvice(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey === "your-gemini-key") {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey || apiKey === "your-groq-key") {
     writeJson(res, 501, {
       error: "AI Advisor is not configured.",
-      setupHint: "Set GEMINI_API_KEY in .env and restart npm run dev.",
+      setupHint: "Set GROQ_API_KEY in .env and restart npm run dev.",
     });
     return;
   }
@@ -45,7 +45,7 @@ async function handleAiAdvice(req: IncomingMessage, res: ServerResponse): Promis
   const request = JSON.parse(await readBody(req)) as AiAdvisorRequest;
   validateAdvisorRequest(request);
 
-  const parsed = await askGeminiAdvisor(apiKey, request);
+  const parsed = await askGroqAdvisor(apiKey, request);
   if (!isAiAdvisorResponse(parsed)) {
     throw new Error("AI Advisor returned an invalid response shape");
   }
@@ -61,11 +61,8 @@ async function handleAiAdvice(req: IncomingMessage, res: ServerResponse): Promis
   writeJson(res, 200, parsed);
 }
 
-async function askGeminiAdvisor(apiKey: string, request: AiAdvisorRequest): Promise<unknown> {
-  const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-    model,
-  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+async function askGroqAdvisor(apiKey: string, request: AiAdvisorRequest): Promise<unknown> {
+  const model = process.env.GROQ_MODEL ?? "llama-3.1-8b-instant";
   const prompt = JSON.stringify({
     task: "Choose a routing policy and route from the candidates. Explain tradeoffs.",
     rules: [
@@ -92,36 +89,38 @@ async function askGeminiAdvisor(apiKey: string, request: AiAdvisorRequest): Prom
     request,
   });
 
-  const response = await fetch(endpoint, {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
     body: JSON.stringify({
-      systemInstruction: {
-        parts: [
-          {
-            text: "You are an on-chain DEX smart order routing advisor. Return valid JSON only.",
-          },
-        ],
-      },
-      contents: [
+      model,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an on-chain DEX smart order routing advisor. Return valid JSON only. Never output markdown.",
+        },
         {
           role: "user",
-          parts: [{ text: prompt }],
+          content: prompt,
         },
       ],
-      generationConfig: {
-        responseMimeType: "application/json",
-      },
+      temperature: 0.2,
+      max_completion_tokens: 1200,
+      response_format: { type: "json_object" },
     }),
   });
 
-  const payload = (await response.json()) as GeminiGenerateContentResponse | GeminiErrorResponse;
+  const payload = (await response.json()) as GroqChatCompletionResponse | GroqErrorResponse;
   if (!response.ok) {
-    throw new Error(geminiErrorMessage(payload));
+    throw new Error(groqErrorMessage(payload));
   }
-  const text = "candidates" in payload ? payload.candidates?.[0]?.content?.parts?.[0]?.text : undefined;
+  const text = "choices" in payload ? payload.choices?.[0]?.message?.content : undefined;
   if (!text) {
-    throw new Error("Gemini Advisor returned no text");
+    throw new Error("Groq Advisor returned no text");
   }
   return parseAdvisorJson(text);
 }
@@ -148,25 +147,25 @@ function parseAdvisorJson(text: string): unknown {
   }
 }
 
-interface GeminiGenerateContentResponse {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{ text?: string }>;
+interface GroqChatCompletionResponse {
+  choices?: Array<{
+    message?: {
+      content?: string | null;
     };
   }>;
 }
 
-interface GeminiErrorResponse {
+interface GroqErrorResponse {
   error?: {
     message?: string;
   };
 }
 
-function geminiErrorMessage(payload: GeminiGenerateContentResponse | GeminiErrorResponse): string {
+function groqErrorMessage(payload: GroqChatCompletionResponse | GroqErrorResponse): string {
   if ("error" in payload && payload.error?.message) {
-    return `Gemini Advisor failed: ${payload.error.message}`;
+    return `Groq Advisor failed: ${payload.error.message}`;
   }
-  return "Gemini Advisor failed";
+  return "Groq Advisor failed";
 }
 
 async function readBody(req: IncomingMessage): Promise<string> {
